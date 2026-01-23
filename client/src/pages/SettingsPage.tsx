@@ -1,0 +1,257 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useUser } from '../hooks/useUser'
+import { useTags } from '../hooks/usePosts'
+import { SignOutButton } from '@clerk/clerk-react'
+import { ChevronLeft, User, Tag, LogOut, Loader2 } from 'lucide-react'
+
+const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+
+export default function SettingsPage() {
+  const navigate = useNavigate()
+  const { user, isLoading, updateProfile, updateInterests } = useUser()
+  const { tags: availableTags } = useTags()
+
+  const [activeSection, setActiveSection] = useState<'main' | 'profile' | 'interests'>('main')
+  const [username, setUsername] = useState(user?.username || '')
+  const [displayName, setDisplayName] = useState(user?.displayName || '')
+  const [bio, setBio] = useState(user?.bio || '')
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  // Sync state when user loads
+  useState(() => {
+    if (user) {
+      setUsername(user.username || '')
+      setDisplayName(user.displayName || '')
+      setBio(user.bio || '')
+    }
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
+      </div>
+    )
+  }
+
+  const handleSaveProfile = async () => {
+    try {
+      setIsSaving(true)
+      setError(null)
+      await updateProfile({
+        username: username !== user?.username ? username : undefined,
+        displayName,
+        bio,
+      })
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 2000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSaveInterests = async () => {
+    try {
+      setIsSaving(true)
+      setError(null)
+      await updateInterests(selectedInterests)
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 2000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const toggleInterest = (tagName: string) => {
+    setSelectedInterests(prev =>
+      prev.includes(tagName)
+        ? prev.filter(t => t !== tagName)
+        : [...prev, tagName]
+    )
+  }
+
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'profile':
+        return (
+          <div className="px-4 py-4">
+            <div className="flex items-center mb-6">
+              <button onClick={() => setActiveSection('main')} className="p-1 mr-2">
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <h2 className="text-xl font-bold">Edit Profile</h2>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg text-sm">
+                Saved successfully!
+              </div>
+            )}
+
+            {/* Avatar */}
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <img
+                  src={user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}`}
+                  alt="Avatar"
+                  className="w-24 h-24 rounded-full"
+                />
+                <button className="absolute bottom-0 right-0 p-2 bg-eidola-orange rounded-full text-white">
+                  <User className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Username */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+              />
+            </div>
+
+            {/* Display name */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Display Name</label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+              />
+            </div>
+
+            {/* Bio */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2">Bio</label>
+              <textarea
+                value={bio}
+                onChange={e => setBio(e.target.value)}
+                placeholder="Tell us about yourself..."
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+                rows={4}
+              />
+            </div>
+
+            <button
+              onClick={handleSaveProfile}
+              disabled={isSaving}
+              className="w-full btn-gradient py-3 rounded-xl text-white font-medium disabled:opacity-50"
+            >
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Save Changes'}
+            </button>
+          </div>
+        )
+
+      case 'interests':
+        return (
+          <div className="px-4 py-4">
+            <div className="flex items-center mb-6">
+              <button onClick={() => setActiveSection('main')} className="p-1 mr-2">
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <h2 className="text-xl font-bold">Interests</h2>
+            </div>
+
+            <p className="text-gray-500 mb-6">
+              Select topics you're interested in to personalize your feed
+            </p>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg text-sm">
+                Saved successfully!
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 mb-6">
+              {availableTags.map(tag => (
+                <button
+                  key={tag.id}
+                  onClick={() => toggleInterest(tag.name)}
+                  className={`px-4 py-2 rounded-full transition-colors ${
+                    selectedInterests.includes(tag.name)
+                      ? 'bg-eidola-orange text-white'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  #{tag.name}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={handleSaveInterests}
+              disabled={isSaving}
+              className="w-full btn-gradient py-3 rounded-xl text-white font-medium disabled:opacity-50"
+            >
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Save Interests'}
+            </button>
+          </div>
+        )
+
+      default:
+        return (
+          <div className="px-4 py-4">
+            <div className="flex items-center mb-6">
+              <button onClick={() => navigate(-1)} className="p-1 mr-2">
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <h1 className="text-xl font-bold">Settings</h1>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => setActiveSection('profile')}
+                className="w-full flex items-center gap-4 p-4 bg-gray-100 rounded-xl"
+              >
+                <User className="w-5 h-5" />
+                <span>Edit Profile</span>
+              </button>
+
+              <button
+                onClick={() => setActiveSection('interests')}
+                className="w-full flex items-center gap-4 p-4 bg-gray-100 rounded-xl"
+              >
+                <Tag className="w-5 h-5" />
+                <span>Interests</span>
+              </button>
+
+              {hasClerk && (
+                <SignOutButton>
+                  <button className="w-full flex items-center gap-4 p-4 bg-red-50 text-red-600 rounded-xl">
+                    <LogOut className="w-5 h-5" />
+                    <span>Sign Out</span>
+                  </button>
+                </SignOutButton>
+              )}
+            </div>
+          </div>
+        )
+    }
+  }
+
+  return <div className="max-w-lg mx-auto bg-white min-h-screen">{renderSection()}</div>
+}
