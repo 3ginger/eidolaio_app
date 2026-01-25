@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { usePost, useComments, likePost } from '../hooks/usePosts'
+import { useState, useEffect, useRef } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '@clerk/clerk-react'
+import { usePost, useComments, likePost, deletePost, reportPost } from '../hooks/usePosts'
 import PhotoChain from '../components/post/PhotoChain'
 import NSFWOverlay from '../components/common/NSFWOverlay'
 import ChallengeSubmit from '../components/challenge/ChallengeSubmit'
@@ -13,10 +14,14 @@ import {
   MoreHorizontal,
   Loader2,
   ChevronLeft,
-  Send
+  Send,
+  Pencil,
+  Image
 } from 'lucide-react'
 
 export default function PostDetailPage() {
+  const { getToken } = useAuth()
+  const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const postId = id ? parseInt(id) : undefined
   const { post, isLoading, error } = usePost(postId)
@@ -26,14 +31,37 @@ export default function PostDetailPage() {
   const [isLiked, setIsLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(0)
   const [showChallenge, setShowChallenge] = useState(false)
+  const [showDrawing, setShowDrawing] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportReason, setReportReason] = useState<'spam' | 'nsfw' | 'harassment' | 'copyright' | 'other'>('spam')
+  const [reportDescription, setReportDescription] = useState('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   // Sync like state when post loads
-  useState(() => {
+  useEffect(() => {
     if (post) {
       setIsLiked(post.isLiked || false)
       setLikesCount(post.likesCount)
     }
-  })
+  }, [post])
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false)
+      }
+    }
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMenu])
+
+  const isOwnPost = post?.isOwner || false
 
   if (isLoading) {
     return (
@@ -56,7 +84,8 @@ export default function PostDetailPage() {
 
   const handleLike = async () => {
     if (!postId) return
-    const result = await likePost(postId)
+    const token = await getToken()
+    const result = await likePost(postId, token)
     setIsLiked(result.liked)
     setLikesCount(prev => result.liked ? prev + 1 : prev - 1)
   }
@@ -81,6 +110,44 @@ export default function PostDetailPage() {
     }
   }
 
+  const handleCopyLink = async () => {
+    await navigator.clipboard.writeText(window.location.href)
+    setShowMenu(false)
+    alert('Link copied!')
+  }
+
+  const handleDelete = async () => {
+    if (!postId) return
+    if (!confirm('Are you sure you want to delete this post?')) return
+    const token = await getToken()
+    await deletePost(postId, token)
+    navigate('/feed')
+  }
+
+  const handleReport = () => {
+    setShowMenu(false)
+    setShowReportModal(true)
+    setReportReason('spam')
+    setReportDescription('')
+    setReportError(null)
+  }
+
+  const submitReport = async () => {
+    if (!postId) return
+    try {
+      setReportSubmitting(true)
+      setReportError(null)
+      const token = await getToken()
+      await reportPost(postId, reportReason, reportDescription || undefined, token)
+      setShowReportModal(false)
+      alert('Report submitted. Thank you for helping keep our community safe.')
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Failed to submit report')
+    } finally {
+      setReportSubmitting(false)
+    }
+  }
+
   const timeRemaining = post.expiresAt
     ? getTimeRemaining(new Date(post.expiresAt))
     : null
@@ -100,29 +167,83 @@ export default function PostDetailPage() {
           />
           <span className="font-medium">@{post.user?.username}</span>
         </div>
-        <button className="p-1">
-          <MoreHorizontal className="w-6 h-6" />
-        </button>
+        <div className="relative" ref={menuRef}>
+          <button className="p-1" onClick={() => setShowMenu(!showMenu)}>
+            <MoreHorizontal className="w-6 h-6" />
+          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border py-1 z-20">
+              <button
+                onClick={handleCopyLink}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+              >
+                Copy link
+              </button>
+              <button
+                onClick={handleReport}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+              >
+                Report
+              </button>
+              {isOwnPost && (
+                <button
+                  onClick={handleDelete}
+                  className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-gray-100"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Image */}
       <div className="relative">
-        {post.isNsfw && !showNsfw ? (
-          <NSFWOverlay onReveal={() => setShowNsfw(true)}>
-            <img
-              src={post.imageUrl}
-              alt={post.title || 'Pareidolia'}
-              className="w-full blur-xl"
-            />
-          </NSFWOverlay>
-        ) : (
-          <img
-            src={post.imageUrl}
-            alt={post.title || 'Pareidolia'}
-            className="w-full"
-            onDoubleClick={handleLike}
-          />
-        )}
+        {(() => {
+          // Get drawing dataUrl if available
+          const drawingDataUrl = post.userDrawing && typeof post.userDrawing === 'object' && 'dataUrl' in post.userDrawing
+            ? (post.userDrawing as { dataUrl: string }).dataUrl
+            : null
+          const hasDrawing = !!drawingDataUrl
+          const displayUrl = showDrawing && drawingDataUrl ? drawingDataUrl : post.imageUrl
+
+          return (
+            <>
+              {post.isNsfw && !showNsfw ? (
+                <NSFWOverlay onReveal={() => setShowNsfw(true)}>
+                  <img
+                    src={displayUrl}
+                    alt={post.title || 'Pareidolia'}
+                    className="w-full blur-xl"
+                  />
+                </NSFWOverlay>
+              ) : (
+                <img
+                  src={displayUrl}
+                  alt={post.title || 'Pareidolia'}
+                  className="w-full aspect-square object-cover"
+                  onDoubleClick={handleLike}
+                />
+              )}
+
+              {/* Drawing toggle button - small icon in corner */}
+              {hasDrawing && post.type !== 'challenge' && (
+                <button
+                  onClick={() => setShowDrawing(!showDrawing)}
+                  className="absolute bottom-3 right-3 w-9 h-9 bg-black/50 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center transition-all hover:bg-black/70"
+                  title={showDrawing ? 'Show original' : 'Show drawing'}
+                >
+                  {showDrawing ? (
+                    <Image className="w-5 h-5 text-white" />
+                  ) : (
+                    <Pencil className="w-5 h-5 text-white" />
+                  )}
+                </button>
+              )}
+            </>
+          )
+        })()}
 
         {/* Badges */}
         <div className="absolute top-4 left-4 flex flex-col gap-2">
@@ -272,6 +393,63 @@ export default function PostDetailPage() {
           imageUrl={post.imageUrl}
           onClose={() => setShowChallenge(false)}
         />
+      )}
+
+      {/* Report modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl max-w-sm w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold mb-4">Report Post</h3>
+
+            {reportError && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+                {reportError}
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Reason</label>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value as typeof reportReason)}
+                className="w-full px-3 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+              >
+                <option value="spam">Spam</option>
+                <option value="nsfw">NSFW content</option>
+                <option value="harassment">Harassment</option>
+                <option value="copyright">Copyright violation</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2">Description (optional)</label>
+              <textarea
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                placeholder="Add more details..."
+                className="w-full px-3 py-2 bg-gray-100 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="flex-1 py-2 bg-gray-100 rounded-lg font-medium hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitReport}
+                disabled={reportSubmitting}
+                className="flex-1 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 disabled:opacity-50"
+              >
+                {reportSubmitting ? 'Submitting...' : 'Submit Report'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

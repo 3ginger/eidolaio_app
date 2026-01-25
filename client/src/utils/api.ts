@@ -1,5 +1,5 @@
 // API utility functions
-const API_BASE = import.meta.env.VITE_API_URL || 'https://api-omega-opal-59.vercel.app/api'
+const API_BASE = import.meta.env.VITE_API_URL || 'https://api.eidola.io/api'
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>

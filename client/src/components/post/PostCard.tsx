@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Post } from '../../types/post'
 import NSFWOverlay from '../common/NSFWOverlay'
-import { Heart, MessageCircle, MapPin, Clock, Trophy, Share2 } from 'lucide-react'
+import { Heart, MessageCircle, MapPin, Clock, Trophy, Share2, Pencil, Image } from 'lucide-react'
 
 interface PostCardProps {
   post: Post
@@ -14,6 +14,13 @@ export default function PostCard({ post, onLike }: PostCardProps) {
   const [likesCount, setLikesCount] = useState(post.likesCount)
   const [showNsfw, setShowNsfw] = useState(false)
   const [heartAnimation, setHeartAnimation] = useState(false)
+  const [showDrawing, setShowDrawing] = useState(false)
+
+  // Get drawing dataUrl if available
+  const drawingDataUrl = post.userDrawing && typeof post.userDrawing === 'object' && 'dataUrl' in post.userDrawing
+    ? (post.userDrawing as { dataUrl: string }).dataUrl
+    : null
+  const hasDrawing = !!drawingDataUrl && post.type !== 'challenge'
 
   const handleLike = async () => {
     setIsLiked(!isLiked)
@@ -87,31 +94,51 @@ export default function PostCard({ post, onLike }: PostCardProps) {
       </div>
 
       {/* Image */}
-      <Link to={`/post/${post.id}`} className="block relative">
-        {post.isNsfw && !showNsfw ? (
-          <NSFWOverlay onReveal={() => setShowNsfw(true)}>
-            <img
-              src={post.thumbnailUrl || post.imageUrl}
-              alt={post.title || 'Pareidolia'}
-              className="w-full aspect-square object-cover blur-xl"
-            />
-          </NSFWOverlay>
-        ) : (
-          <div className="relative" onDoubleClick={handleDoubleTap}>
-            <img
-              src={post.thumbnailUrl || post.imageUrl}
-              alt={post.title || 'Pareidolia'}
-              className="w-full aspect-square object-cover"
-            />
-            {/* Heart animation on double tap */}
-            {heartAnimation && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <Heart className="w-24 h-24 text-red-500 fill-current heart-pop" />
-              </div>
+      <div className="relative">
+        <Link to={`/post/${post.id}`} className="block">
+          {post.isNsfw && !showNsfw ? (
+            <NSFWOverlay onReveal={() => setShowNsfw(true)}>
+              <img
+                src={post.thumbnailUrl || post.imageUrl}
+                alt={post.title || 'Pareidolia'}
+                className="w-full aspect-square object-cover blur-xl"
+              />
+            </NSFWOverlay>
+          ) : (
+            <div className="relative" onDoubleClick={handleDoubleTap}>
+              <img
+                src={showDrawing && drawingDataUrl ? drawingDataUrl : (post.thumbnailUrl || post.imageUrl)}
+                alt={post.title || 'Pareidolia'}
+                className="w-full aspect-square object-cover"
+              />
+              {/* Heart animation on double tap */}
+              {heartAnimation && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <Heart className="w-24 h-24 text-red-500 fill-current heart-pop" />
+                </div>
+              )}
+            </div>
+          )}
+        </Link>
+
+        {/* Drawing toggle button */}
+        {hasDrawing && !post.isNsfw && (
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              setShowDrawing(!showDrawing)
+            }}
+            className="absolute bottom-3 right-3 w-9 h-9 bg-black/50 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center transition-all hover:bg-black/70 z-10"
+            title={showDrawing ? 'Show original' : 'Show drawing'}
+          >
+            {showDrawing ? (
+              <Image className="w-5 h-5 text-white" />
+            ) : (
+              <Pencil className="w-5 h-5 text-white" />
             )}
-          </div>
+          </button>
         )}
-      </Link>
+      </div>
 
       {/* Actions */}
       <div className="flex items-center justify-between px-4 py-3">

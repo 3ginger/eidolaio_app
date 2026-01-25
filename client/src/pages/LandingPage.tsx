@@ -23,6 +23,7 @@ const pareidoliaImages = [
   { src: '/images/pareidolia/mountain-face.png', caption: 'Sleeping mountain', tag: '#nature' },
   { src: '/images/pareidolia/cloud-whale.png', caption: 'Cloud whale', tag: '#clouds' },
   { src: '/images/pareidolia/cloud-camel.png', caption: 'Cloud camel', tag: '#clouds' },
+  { src: '/images/pareidolia/cloud-dog.png', caption: 'Cloud dog', tag: '#clouds' },
   { src: '/images/pareidolia/tree-face.png', caption: 'Scary tree face', tag: '#nature' },
   { src: '/images/pareidolia/house-face.png', caption: 'House face', tag: '#buildings' },
 ]

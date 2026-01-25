@@ -26,7 +26,7 @@ export default function NSFWOverlay({ children, onReveal }: NSFWOverlayProps) {
             This content has been marked as sensitive or adult material
           </p>
           <button
-            onClick={onReveal}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onReveal(); }}
             className="flex items-center justify-center gap-2 w-full py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
           >
             <Eye className="w-4 h-4" />

@@ -9,6 +9,7 @@ import userRouter from './routes/user.js'
 import feedRouter from './routes/feed.js'
 import chainRouter from './routes/chain.js'
 import uploadRouter from './routes/upload.js'
+import adminRouter from './routes/admin.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -16,7 +17,8 @@ const PORT = process.env.PORT || 3001
 // Middleware
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://eidola-app.vercel.app',
+  'https://eidola.io',
+  'https://www.eidola.io',
   process.env.FRONTEND_URL,
 ].filter(Boolean) as string[]
 
@@ -50,6 +52,7 @@ app.use('/api/user', userRouter)
 app.use('/api/feed', feedRouter)
 app.use('/api/chain', chainRouter)
 app.use('/api/upload', uploadRouter)
+app.use('/api/admin', adminRouter)
 
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

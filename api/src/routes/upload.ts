@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { UTApi } from 'uploadthing/server'
+import { UTApi, UTFile } from 'uploadthing/server'
 import multer from 'multer'
 import { requireAuth } from '../middleware/auth.js'
 
@@ -31,12 +31,10 @@ router.post('/', requireAuth, upload.single('file'), async (req: Request, res: R
       return res.status(400).json({ error: 'No file uploaded' })
     }
 
-    // Create a File object from the buffer
-    const file = new File(
-      [req.file.buffer],
-      req.file.originalname,
-      { type: req.file.mimetype }
-    )
+    // Create a UTFile from the buffer (proper Uploadthing Node.js API)
+    // First create a typed Blob, then wrap in UTFile
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype })
+    const file = new UTFile([blob], req.file.originalname)
 
     // Upload to Uploadthing
     const response = await utapi.uploadFiles([file])
@@ -82,5 +80,6 @@ router.get('/config', (req: Request, res: Response) => {
     endpoint: '/api/upload'
   })
 })
+
 
 export default router

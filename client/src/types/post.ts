@@ -57,6 +57,7 @@ export interface Post {
   }
   tags?: string[]
   isLiked?: boolean
+  isOwner?: boolean
   timeRemaining?: string
 }
 
@@ -91,4 +92,19 @@ export interface PhotoChainEntry {
 export interface Tag {
   id: number
   name: string
+}
+
+export type ReportReason = 'spam' | 'nsfw' | 'harassment' | 'copyright' | 'other'
+export type ReportStatus = 'pending' | 'dismissed' | 'sustained'
+
+export interface Report {
+  id: number
+  postId: number
+  reporterId: number
+  reason: ReportReason
+  description?: string
+  status: ReportStatus
+  createdAt: string
+  resolvedAt?: string
+  resolvedBy?: number
 }

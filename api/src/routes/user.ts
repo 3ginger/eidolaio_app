@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express'
+import { clerkClient } from '@clerk/express'
 import { requireAuth, optionalAuth } from '../middleware/auth.js'
 import { query, getOne, getMany } from '../services/db.js'
+
+// Admin emails from environment variable (comma-separated)
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 
 const router = Router()
 
@@ -12,6 +16,7 @@ interface UserRow {
   avatar_url: string | null
   bio: string | null
   points: number
+  is_admin: boolean
   created_at: string
   updated_at: string
 }
@@ -19,13 +24,29 @@ interface UserRow {
 // Get current user profile
 router.get('/me', requireAuth, async (req: Request, res: Response) => {
   try {
-    const user = await getOne<UserRow>(
-      'SELECT * FROM eidola.users WHERE id = $1',
+    let user = await getOne<UserRow>(
+      'SELECT *, COALESCE(is_admin, false) as is_admin FROM eidola.users WHERE id = $1',
       [req.userId]
     )
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' })
+    }
+
+    // Check if user should be admin based on email (auto-promote from env var)
+    if (!user.is_admin && ADMIN_EMAILS.length > 0 && req.clerkUserId) {
+      try {
+        const clerkUser = await clerkClient.users.getUser(req.clerkUserId)
+        const userEmail = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId)?.emailAddress?.toLowerCase()
+
+        if (userEmail && ADMIN_EMAILS.includes(userEmail)) {
+          // Auto-promote to admin
+          await query('UPDATE eidola.users SET is_admin = true WHERE id = $1', [user.id])
+          user.is_admin = true
+        }
+      } catch (err) {
+        console.error('Failed to check Clerk email for admin:', err)
+      }
     }
 
     // Get counts
@@ -57,6 +78,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
       avatarUrl: user.avatar_url,
       bio: user.bio,
       points: user.points,
+      isAdmin: user.is_admin,
       createdAt: user.created_at,
       postsCount: parseInt(stats?.posts_count || '0'),
       followersCount: parseInt(stats?.followers_count || '0'),

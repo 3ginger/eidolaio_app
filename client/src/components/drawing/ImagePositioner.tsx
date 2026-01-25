@@ -6,6 +6,8 @@ export interface ImageTransform {
   y: number
   scale: number
   rotation: number
+  containerWidth?: number
+  containerHeight?: number
 }
 
 interface ImagePositionerProps {
@@ -248,23 +250,27 @@ export default function ImagePositioner({ imageUrl, onDone, onCancel }: ImagePos
   }, [containerSize, imageSize])
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-gray-900">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-b">
+    <div className="h-[100dvh] flex flex-col bg-gray-900 overflow-hidden">
+      {/* Header - fixed height */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-white border-b">
         <button onClick={onCancel} className="p-1">
           <X className="w-6 h-6" />
         </button>
         <h2 className="font-semibold">Position your image</h2>
         <button
-          onClick={() => onDone(transform)}
+          onClick={() => onDone({
+            ...transform,
+            containerWidth: containerSize.width,
+            containerHeight: containerSize.height,
+          })}
           className="p-1 text-eidola-orange"
         >
           <Check className="w-6 h-6" />
         </button>
       </div>
 
-      {/* Instructions */}
-      <div className="bg-gray-800 text-white text-center py-2 text-sm flex items-center justify-center gap-4">
+      {/* Instructions - fixed height */}
+      <div className="flex-shrink-0 bg-gray-800 text-white text-center py-2 text-sm flex items-center justify-center gap-4">
         <span className="flex items-center gap-1">
           <Move className="w-4 h-4" /> Drag
         </span>
@@ -276,10 +282,10 @@ export default function ImagePositioner({ imageUrl, onDone, onCancel }: ImagePos
         </span>
       </div>
 
-      {/* Canvas area */}
+      {/* Canvas area - takes remaining space */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden touch-none cursor-grab active:cursor-grabbing"
+        className="flex-1 min-h-0 overflow-hidden touch-none cursor-grab active:cursor-grabbing relative"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -307,10 +313,31 @@ export default function ImagePositioner({ imageUrl, onDone, onCancel }: ImagePos
             draggable={false}
           />
         </div>
+
+        {/* Square crop overlay - shows exactly what will be captured */}
+        {containerSize.width > 0 && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            {/* Semi-transparent overlay with square cutout using box-shadow trick */}
+            <div
+              className="relative"
+              style={{
+                width: containerSize.width,
+                height: containerSize.width,
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+              }}
+            >
+              {/* Corner indicators for the crop area */}
+              <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white/70" />
+              <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white/70" />
+              <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white/70" />
+              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white/70" />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Bottom toolbar */}
-      <div className="bg-white px-4 py-3 flex items-center justify-center gap-4 border-t">
+      {/* Bottom toolbar - fixed height */}
+      <div className="flex-shrink-0 bg-white px-4 py-3 flex items-center justify-center gap-4 border-t">
         <button
           onClick={handleReset}
           className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg text-sm font-medium"

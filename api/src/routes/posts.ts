@@ -86,10 +86,11 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
   try {
     const postId = parseInt(req.params.id as string)
 
-    const post = await getOne<PostRow>(
+    const post = await getOne<PostRow & { is_owner: boolean }>(
       `SELECT p.*,
               u.username, u.display_name, u.avatar_url,
-              ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.likes WHERE post_id = p.id AND user_id = $2) as is_liked' : 'false as is_liked'}
+              ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.likes WHERE post_id = p.id AND user_id = $2) as is_liked' : 'false as is_liked'},
+              ${req.userId ? 'p.user_id = $2 as is_owner' : 'false as is_owner'}
        FROM eidola.posts p
        JOIN eidola.users u ON p.user_id = u.id
        WHERE p.id = $1`,
@@ -110,7 +111,8 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
 
     res.json({
       ...formatPost(post),
-      tags: tags.map(t => t.name)
+      tags: tags.map(t => t.name),
+      isOwner: post.is_owner
     })
   } catch (error) {
     console.error('Error fetching post:', error)
@@ -340,6 +342,44 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting post:', error)
     res.status(500).json({ error: 'Failed to delete post' })
+  }
+})
+
+// Report a post
+router.post('/:id/report', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const postId = parseInt(req.params.id as string)
+    const { reason, description } = req.body
+
+    if (!reason || !['spam', 'nsfw', 'harassment', 'copyright', 'other'].includes(reason)) {
+      return res.status(400).json({ error: 'Invalid or missing reason. Must be: spam, nsfw, harassment, copyright, or other' })
+    }
+
+    // Check if post exists
+    const post = await getOne<{ id: number }>('SELECT id FROM eidola.posts WHERE id = $1', [postId])
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' })
+    }
+
+    // Check if user already reported this post
+    const existingReport = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.reports WHERE post_id = $1 AND reporter_id = $2',
+      [postId, req.userId]
+    )
+    if (existingReport) {
+      return res.status(400).json({ error: 'You have already reported this post' })
+    }
+
+    // Create report
+    await query(
+      'INSERT INTO eidola.reports (post_id, reporter_id, reason, description) VALUES ($1, $2, $3, $4)',
+      [postId, req.userId, reason, description || null]
+    )
+
+    res.json({ success: true, message: 'Report submitted successfully' })
+  } catch (error) {
+    console.error('Error reporting post:', error)
+    res.status(500).json({ error: 'Failed to submit report' })
   }
 })
 

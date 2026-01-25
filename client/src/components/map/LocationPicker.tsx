@@ -6,6 +6,8 @@ import { MapPin, Search, X, Loader2, Crosshair } from 'lucide-react'
 interface LocationPickerProps {
   onSelect: (location: { lat: number; lng: number }, address: string) => void
   onCancel: () => void
+  initialLocation?: { lat: number; lng: number } | null
+  initialAddress?: string
 }
 
 interface SearchResult {
@@ -15,7 +17,7 @@ interface SearchResult {
   display_name: string
 }
 
-export default function LocationPicker({ onSelect, onCancel }: LocationPickerProps) {
+export default function LocationPicker({ onSelect, onCancel, initialLocation, initialAddress }: LocationPickerProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const leafletMapRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
@@ -25,16 +27,22 @@ export default function LocationPicker({ onSelect, onCancel }: LocationPickerPro
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const [selectedAddress, setSelectedAddress] = useState('')
+  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(initialLocation || null)
+  const [selectedAddress, setSelectedAddress] = useState(initialAddress || '')
 
   // Initialize map
   useEffect(() => {
     if (!mapRef.current || leafletMapRef.current) return
 
+    // Use initial location if available, otherwise default
+    const initialCenter: [number, number] = initialLocation
+      ? [initialLocation.lat, initialLocation.lng]
+      : [51.505, -0.09]
+    const initialZoom = initialLocation ? 15 : 13
+
     const map = L.map(mapRef.current, {
-      center: [51.505, -0.09],
-      zoom: 13,
+      center: initialCenter,
+      zoom: initialZoom,
       zoomControl: false,
     })
 
@@ -52,8 +60,32 @@ export default function LocationPicker({ onSelect, onCancel }: LocationPickerPro
 
     leafletMapRef.current = map
 
-    // Request location
-    requestPermission()
+    // If there's an initial location, add the marker
+    if (initialLocation) {
+      const icon = L.divIcon({
+        className: 'custom-marker',
+        html: `
+          <div class="w-10 h-10 flex items-center justify-center">
+            <div class="w-4 h-4 bg-eidola-orange rounded-full border-4 border-white shadow-lg"></div>
+          </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      })
+      markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], { icon, draggable: true }).addTo(map)
+
+      // Handle marker drag
+      markerRef.current.on('dragend', async () => {
+        const pos = markerRef.current?.getLatLng()
+        if (pos) {
+          await reverseGeocode(pos.lat, pos.lng)
+          setSelectedLocation({ lat: pos.lat, lng: pos.lng })
+        }
+      })
+    } else {
+      // Request location only if no initial location
+      requestPermission()
+    }
 
     return () => {
       map.remove()
@@ -164,7 +196,7 @@ export default function LocationPicker({ onSelect, onCancel }: LocationPickerPro
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Header */}
       <div className="bg-white px-4 py-3 border-b flex items-center gap-3">
         <button onClick={onCancel}>

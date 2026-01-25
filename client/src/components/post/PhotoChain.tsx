@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '@clerk/clerk-react'
 import { get, post } from '../../utils/api'
 import { useGeolocation } from '../../hooks/useGeolocation'
 import { Camera, MapPin, Loader2, ChevronRight } from 'lucide-react'
@@ -22,6 +23,7 @@ interface PhotoChainProps {
 }
 
 export default function PhotoChain({ postId }: PhotoChainProps) {
+  const { getToken } = useAuth()
   const [entries, setEntries] = useState<ChainEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [canJoin, setCanJoin] = useState(false)
@@ -34,7 +36,8 @@ export default function PhotoChain({ postId }: PhotoChainProps) {
   useEffect(() => {
     const fetchChain = async () => {
       try {
-        const data = await get<{ entries: ChainEntry[] }>(`/chain/${postId}`)
+        const token = await getToken()
+        const data = await get<{ entries: ChainEntry[] }>(`/chain/${postId}`, undefined, token)
         setEntries(data.entries)
       } catch (err) {
         console.error('Failed to fetch chain:', err)
@@ -44,14 +47,15 @@ export default function PhotoChain({ postId }: PhotoChainProps) {
     }
 
     fetchChain()
-  }, [postId])
+  }, [postId, getToken])
 
   // Check if user can join
   useEffect(() => {
     if (lat && lng) {
       const checkCanJoin = async () => {
         try {
-          const data = await get<{ canJoin: boolean; distance?: number }>(`/chain/${postId}/can-join`, { lat, lng })
+          const token = await getToken()
+          const data = await get<{ canJoin: boolean; distance?: number }>(`/chain/${postId}/can-join`, { lat, lng }, token)
           setCanJoin(data.canJoin)
           if (data.distance) {
             setDistance(data.distance)
@@ -63,20 +67,21 @@ export default function PhotoChain({ postId }: PhotoChainProps) {
 
       checkCanJoin()
     }
-  }, [postId, lat, lng])
+  }, [postId, lat, lng, getToken])
 
   const handleJoin = async (photoUrl: string, caption: string) => {
     try {
       setIsJoining(true)
+      const token = await getToken()
       const result = await post<{ position: number; badge: string }>(`/chain/${postId}/join`, {
         photoUrl,
         caption,
         userLat: lat,
         userLng: lng,
-      })
+      }, token)
 
       // Refetch chain
-      const data = await get<{ entries: ChainEntry[] }>(`/chain/${postId}`)
+      const data = await get<{ entries: ChainEntry[] }>(`/chain/${postId}`, undefined, token)
       setEntries(data.entries)
 
       alert(`You're ${result.badge} in the chain!`)

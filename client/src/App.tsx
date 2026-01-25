@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
 import LandingPage from './pages/LandingPage'
 import FeedPage from './pages/FeedPage'
@@ -8,6 +8,7 @@ import PostDetailPage from './pages/PostDetailPage'
 import CreatePostPage from './pages/CreatePostPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
+import AdminPage from './pages/AdminPage'
 import Header from './components/layout/Header'
 import MobileNav from './components/layout/MobileNav'
 
@@ -29,13 +30,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
+  const isCreateFlow = location.pathname === '/create'
+
   return (
-    <div className="min-h-screen bg-eidola-bg">
+    <div className="min-h-screen bg-eidola-bg flex flex-col">
       <Header />
-      <main className="pb-20 md:pb-0">
+      <main className={`flex-1 ${!isCreateFlow ? 'pb-20 md:pb-0' : ''}`}>
         {children}
       </main>
-      <MobileNav />
+      {!isCreateFlow && <MobileNav />}
     </div>
   )
 }
@@ -71,9 +75,10 @@ export default function App() {
         } />
         <Route path="/create" element={
           <ProtectedRoute>
-            <AppLayout>
+            <div className="h-screen bg-eidola-bg flex flex-col overflow-hidden">
+              <Header />
               <CreatePostPage />
-            </AppLayout>
+            </div>
           </ProtectedRoute>
         } />
         <Route path="/post/:id" element={
@@ -94,6 +99,13 @@ export default function App() {
           <ProtectedRoute>
             <AppLayout>
               <SettingsPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AdminPage />
             </AppLayout>
           </ProtectedRoute>
         } />

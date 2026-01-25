@@ -1,8 +1,10 @@
+import { useAuth } from '@clerk/clerk-react'
 import { useFeed, likePost } from '../hooks/usePosts'
 import PostCard from '../components/post/PostCard'
 import { Loader2, RefreshCw } from 'lucide-react'
 
 export default function FeedPage() {
+  const { getToken } = useAuth()
   const { posts, isLoading, error, hasMore, loadMore, refresh } = useFeed()
 
   if (isLoading && posts.length === 0) {
@@ -41,7 +43,8 @@ export default function FeedPage() {
   }
 
   const handleLike = async (postId: number) => {
-    await likePost(postId)
+    const token = await getToken()
+    await likePost(postId, token)
   }
 
   return (

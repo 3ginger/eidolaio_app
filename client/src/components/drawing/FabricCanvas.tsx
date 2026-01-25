@@ -14,14 +14,6 @@ interface FabricCanvasProps {
   imageUrl: string
   onSave: (data: object) => void
   initialData?: object
-  imageTransform?: ImageTransform
-}
-
-export interface ImageTransform {
-  x: number
-  y: number
-  scale: number
-  rotation: number
 }
 
 const COLORS = [
@@ -29,7 +21,7 @@ const COLORS = [
   '#4CAF50', '#2196F3', '#9C27B0', '#E91E63', '#795548'
 ]
 
-export default function FabricCanvas({ imageUrl, onSave, initialData, imageTransform }: FabricCanvasProps) {
+export default function FabricCanvas({ imageUrl, onSave, initialData }: FabricCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fabricRef = useRef<Canvas | null>(null)
   const [brushColor, setBrushColor] = useState('#FF0000')
@@ -41,6 +33,7 @@ export default function FabricCanvas({ imageUrl, onSave, initialData, imageTrans
   const historyRef = useRef<string[]>([])
   const historyIndexRef = useRef(-1)
   const isUndoRedoRef = useRef(false)
+  const backgroundImageRef = useRef<FabricImage | null>(null)
 
   // State for UI updates (disabled states)
   const [historyLength, setHistoryLength] = useState(0)
@@ -68,6 +61,7 @@ export default function FabricCanvas({ imageUrl, onSave, initialData, imageTrans
       isDrawingMode: true,
       width: window.innerWidth,
       height: window.innerWidth, // Square canvas
+      backgroundColor: '#1f2937', // Match ImagePositioner background
     })
 
     fabricRef.current = canvas
@@ -78,40 +72,27 @@ export default function FabricCanvas({ imageUrl, onSave, initialData, imageTrans
     brush.color = brushColor
     canvas.freeDrawingBrush = brush
 
-    // Load background image
+    // Load background image (already transformed from ImagePositioner)
     FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
-      // Apply transform if provided (from ImagePositioner)
-      let scale: number
-      let left: number
-      let top: number
-      let angle = 0
-
-      if (imageTransform) {
-        scale = imageTransform.scale
-        left = imageTransform.x + (canvas.width! / 2) - (img.width! * scale / 2)
-        top = imageTransform.y + (canvas.height! / 2) - (img.height! * scale / 2)
-        angle = imageTransform.rotation
-      } else {
-        // Default: fit to canvas
-        scale = Math.min(
-          canvas.width! / img.width!,
-          canvas.height! / img.height!
-        )
-        left = (canvas.width! - img.width! * scale) / 2
-        top = (canvas.height! - img.height! * scale) / 2
-      }
+      // Fit image to canvas (image is already transformed, just need to scale to fit)
+      const scale = Math.min(
+        canvas.width! / img.width!,
+        canvas.height! / img.height!
+      )
+      const left = (canvas.width! - img.width! * scale) / 2
+      const top = (canvas.height! - img.height! * scale) / 2
 
       img.scale(scale)
       img.set({
         left,
         top,
-        angle,
         selectable: false,
         evented: false,
         originX: 'left',
         originY: 'top',
       })
       canvas.backgroundImage = img
+      backgroundImageRef.current = img // Store reference for undo/redo
       canvas.renderAll()
 
       // Load initial data if provided
@@ -133,7 +114,7 @@ export default function FabricCanvas({ imageUrl, onSave, initialData, imageTrans
     return () => {
       canvas.dispose()
     }
-  }, [imageUrl, imageTransform, saveToHistory])
+  }, [imageUrl, saveToHistory])
 
   // Update brush settings
   useEffect(() => {
@@ -172,9 +153,25 @@ export default function FabricCanvas({ imageUrl, onSave, initialData, imageTrans
 
     isUndoRedoRef.current = true
     const newIndex = historyIndexRef.current - 1
+    const canvas = fabricRef.current
 
-    fabricRef.current.loadFromJSON(JSON.parse(historyRef.current[newIndex]), () => {
-      fabricRef.current?.renderAll()
+    canvas.loadFromJSON(JSON.parse(historyRef.current[newIndex]), () => {
+      // Recreate background image from URL (loadFromJSON doesn't preserve it)
+      FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
+        const scale = Math.min(canvas.width! / img.width!, canvas.height! / img.height!)
+        img.scale(scale)
+        img.set({
+          left: (canvas.width! - img.width! * scale) / 2,
+          top: (canvas.height! - img.height! * scale) / 2,
+          selectable: false,
+          evented: false,
+          originX: 'left',
+          originY: 'top',
+        })
+        canvas.backgroundImage = img
+        backgroundImageRef.current = img
+        canvas.renderAll()
+      })
       historyIndexRef.current = newIndex
       setCurrentIndex(newIndex)
       // Delay resetting flag to ensure no intermediate events are captured
@@ -182,16 +179,32 @@ export default function FabricCanvas({ imageUrl, onSave, initialData, imageTrans
         isUndoRedoRef.current = false
       }, 50)
     })
-  }, [])
+  }, [imageUrl])
 
   const redo = useCallback(() => {
     if (historyIndexRef.current >= historyRef.current.length - 1 || !fabricRef.current) return
 
     isUndoRedoRef.current = true
     const newIndex = historyIndexRef.current + 1
+    const canvas = fabricRef.current
 
-    fabricRef.current.loadFromJSON(JSON.parse(historyRef.current[newIndex]), () => {
-      fabricRef.current?.renderAll()
+    canvas.loadFromJSON(JSON.parse(historyRef.current[newIndex]), () => {
+      // Recreate background image from URL (loadFromJSON doesn't preserve it)
+      FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
+        const scale = Math.min(canvas.width! / img.width!, canvas.height! / img.height!)
+        img.scale(scale)
+        img.set({
+          left: (canvas.width! - img.width! * scale) / 2,
+          top: (canvas.height! - img.height! * scale) / 2,
+          selectable: false,
+          evented: false,
+          originX: 'left',
+          originY: 'top',
+        })
+        canvas.backgroundImage = img
+        backgroundImageRef.current = img
+        canvas.renderAll()
+      })
       historyIndexRef.current = newIndex
       setCurrentIndex(newIndex)
       // Delay resetting flag to ensure no intermediate events are captured
@@ -199,21 +212,21 @@ export default function FabricCanvas({ imageUrl, onSave, initialData, imageTrans
         isUndoRedoRef.current = false
       }, 50)
     })
-  }, [])
+  }, [imageUrl])
 
   const toggleEraser = () => {
     setIsEraser(!isEraser)
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900">
-      {/* Canvas */}
-      <div className="flex-1 flex items-center justify-center overflow-hidden">
+    <div className="flex flex-col flex-1 bg-gray-900 overflow-hidden">
+      {/* Canvas - takes remaining space */}
+      <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
         <canvas ref={canvasRef} className="drawing-canvas" />
       </div>
 
-      {/* Toolbar */}
-      <div className="bg-white px-4 py-3 flex items-center justify-between border-t">
+      {/* Toolbar - fixed height */}
+      <div className="flex-shrink-0 bg-white px-4 py-3 flex items-center justify-between border-t">
         {/* Left tools */}
         <div className="flex items-center gap-2">
           <button

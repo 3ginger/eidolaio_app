@@ -22,6 +22,58 @@ import {
 type PostType = 'persistent' | 'temporary' | 'challenge'
 type Step = 'upload' | 'position' | 'draw' | 'details' | 'location'
 
+// Generate transformed image from the original using canvas
+async function generateTransformedImage(
+  originalUrl: string,
+  transform: ImageTransform,
+  containerSize: { width: number; height: number }
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      // Create a square canvas matching the container width (what user sees)
+      const canvas = document.createElement('canvas')
+      const size = containerSize.width
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')!
+
+      // Clear canvas with dark grey background (matches ImagePositioner)
+      ctx.fillStyle = '#1f2937'
+      ctx.fillRect(0, 0, size, size)
+
+      // Apply transforms: translate to center, then apply user transforms
+      ctx.save()
+
+      // Move to center of canvas, then apply user's x/y offset
+      ctx.translate(size / 2 + transform.x, size / 2 + transform.y)
+
+      // Apply rotation (convert degrees to radians)
+      ctx.rotate(transform.rotation * Math.PI / 180)
+
+      // Apply scale
+      ctx.scale(transform.scale, transform.scale)
+
+      // Draw image centered at origin
+      ctx.drawImage(img, -img.width / 2, -img.height / 2)
+
+      ctx.restore()
+
+      // Export as blob
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob)
+        } else {
+          reject(new Error('Failed to generate image'))
+        }
+      }, 'image/jpeg', 0.9)
+    }
+    img.onerror = () => reject(new Error('Failed to load image'))
+    img.src = originalUrl
+  })
+}
+
 const expirationOptions = [
   { label: '1 hour', value: 1 },
   { label: '6 hours', value: 6 },
@@ -40,7 +92,9 @@ export default function CreatePostPage() {
   const [step, setStep] = useState<Step>('upload')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imageTransform, setImageTransform] = useState<ImageTransform | null>(null)
+  const [transformedImageUrl, setTransformedImageUrl] = useState<string | null>(null) // The transformed image URL for FabricCanvas
+  const [transformedBlob, setTransformedBlob] = useState<Blob | null>(null) // Blob to upload
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null) // Preview with drawing overlay
   const [postType, setPostType] = useState<PostType>('persistent')
   const [drawingData, setDrawingData] = useState<object | null>(null)
   const [caption, setCaption] = useState('')
@@ -56,31 +110,45 @@ export default function CreatePostPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Handle file selection
+  // Handle file selection - Bug 6: Clear error when selecting new file
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      setError(null) // Clear any previous error
       setImageFile(file)
       const url = URL.createObjectURL(file)
       setImageUrl(url)
-      setImageTransform(null) // Reset transform for new image
+      setPreviewUrl(null) // Reset preview
+      setTransformedImageUrl(null) // Reset transformed image
+      setTransformedBlob(null)
       setStep('position') // Go to position step first
     }
   }
 
-  // Handle camera capture
-  const handleCameraCapture = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      // For now, just open file picker with camera hint
-      stream.getTracks().forEach(track => track.stop())
-      if (fileInputRef.current) {
-        fileInputRef.current.setAttribute('capture', 'environment')
-        fileInputRef.current.click()
-      }
-    } catch {
-      // Fallback to file picker
-      fileInputRef.current?.click()
+  // Bug 1: Simpler camera capture - just use file input with capture attribute
+  const handleCameraCapture = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.setAttribute('capture', 'environment')
+      fileInputRef.current.click()
+    }
+  }
+
+  // Handle gallery upload (remove capture attribute)
+  const handleGalleryUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.removeAttribute('capture')
+      fileInputRef.current.click()
+    }
+  }
+
+  // Bug 5: Handle post type change - auto-set isChallenge when selecting challenge type
+  const handlePostTypeChange = (type: PostType) => {
+    setPostType(type)
+    // Reset isChallenge based on post type
+    if (type === 'challenge') {
+      setIsChallenge(true)
+    } else {
+      setIsChallenge(false)
     }
   }
 
@@ -90,7 +158,7 @@ export default function CreatePostPage() {
     formData.append('file', file)
 
     const token = await getToken()
-    const apiUrl = import.meta.env.VITE_API_URL || 'https://api-omega-opal-59.vercel.app/api'
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://api.eidola.io/api'
 
     const response = await fetch(`${apiUrl}/upload`, {
       method: 'POST',
@@ -118,8 +186,11 @@ export default function CreatePostPage() {
       setIsSubmitting(true)
       setError(null)
 
-      // Upload image
-      const uploadedUrl = await uploadImage(imageFile)
+      // Upload the transformed image if available, otherwise original
+      const fileToUpload = transformedBlob
+        ? new File([transformedBlob], imageFile.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })
+        : imageFile
+      const uploadedUrl = await uploadImage(fileToUpload)
 
       // Calculate expiration if temporary
       let expiresAt: string | undefined
@@ -130,6 +201,7 @@ export default function CreatePostPage() {
       }
 
       // Create post
+      const token = await getToken()
       const result = await createPost({
         type: postType,
         imageUrl: uploadedUrl,
@@ -144,7 +216,7 @@ export default function CreatePostPage() {
         challengeDifficulty: isChallenge ? challengeDifficulty : undefined,
         expiresAt,
         tags: selectedTags,
-      })
+      }, token)
 
       navigate(`/post/${result.id}`)
     } catch (err) {
@@ -159,9 +231,17 @@ export default function CreatePostPage() {
     switch (step) {
       case 'upload':
         return (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 px-4">
-            <h1 className="text-2xl font-bold">What did you spot?</h1>
-            <p className="text-gray-500 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white px-4">
+            {/* Close button to exit create flow */}
+            <button
+              onClick={() => navigate(-1)}
+              className="absolute top-4 left-4 p-2 hover:bg-gray-100 rounded-full"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <h1 className="text-2xl font-bold mb-2">What did you spot?</h1>
+            <p className="text-gray-500 text-center mb-8">
               Take a photo or upload an image of a pareidolia you've discovered
             </p>
 
@@ -183,7 +263,7 @@ export default function CreatePostPage() {
               </button>
 
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={handleGalleryUpload}
                 className="flex flex-col items-center gap-2 p-6 bg-gray-100 rounded-2xl text-gray-700"
               >
                 <Upload className="w-8 h-8" />
@@ -195,24 +275,49 @@ export default function CreatePostPage() {
 
       case 'position':
         return (
-          <ImagePositioner
-            imageUrl={imageUrl!}
-            onDone={(transform) => {
-              setImageTransform(transform)
-              setStep('draw')
-            }}
-            onCancel={() => {
-              setImageUrl(null)
-              setImageFile(null)
-              setStep('upload')
-            }}
-          />
+          <div className="absolute inset-0 bg-gray-900">
+            <ImagePositioner
+              imageUrl={imageUrl!}
+              onDone={async (transform) => {
+                // Generate transformed image for FabricCanvas and upload
+                if (transform.containerWidth && transform.containerHeight) {
+                  try {
+                    const blob = await generateTransformedImage(
+                      imageUrl!,
+                      transform,
+                      { width: transform.containerWidth, height: transform.containerHeight }
+                    )
+                    setTransformedBlob(blob)
+                    // Create object URL for FabricCanvas
+                    const transformedUrl = URL.createObjectURL(blob)
+                    setTransformedImageUrl(transformedUrl)
+                  } catch (err) {
+                    console.error('Failed to generate transformed image:', err)
+                    // Fall back to original image
+                    setTransformedImageUrl(imageUrl)
+                  }
+                } else {
+                  // No container size - use original
+                  setTransformedImageUrl(imageUrl)
+                }
+
+                setStep('draw')
+              }}
+              onCancel={() => {
+                setImageUrl(null)
+                setImageFile(null)
+                setTransformedImageUrl(null)
+                setTransformedBlob(null)
+                setStep('upload')
+              }}
+            />
+          </div>
         )
 
       case 'draw':
         return (
-          <div className="h-[calc(100vh-8rem)]">
-            <div className="flex items-center justify-between px-4 py-2 border-b">
+          <div className="absolute inset-0 flex flex-col bg-gray-900">
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-white border-b">
               <button onClick={() => setStep('position')}>
                 <X className="w-6 h-6" />
               </button>
@@ -226,16 +331,21 @@ export default function CreatePostPage() {
             </div>
 
             <FabricCanvas
-              imageUrl={imageUrl!}
-              onSave={setDrawingData}
-              imageTransform={imageTransform || undefined}
+              imageUrl={transformedImageUrl || imageUrl!}
+              onSave={(data) => {
+                setDrawingData(data)
+                // Bug 4: Save the dataUrl for preview with drawing overlay
+                if (data && typeof data === 'object' && 'dataUrl' in data) {
+                  setPreviewUrl((data as { dataUrl: string }).dataUrl)
+                }
+              }}
             />
           </div>
         )
 
       case 'details':
         return (
-          <div className="px-4 py-4 pb-32">
+          <div className="absolute inset-0 px-4 py-4 pb-8 overflow-y-auto bg-white">
             <div className="flex items-center justify-between mb-6">
               <button onClick={() => setStep('draw')}>
                 <X className="w-6 h-6" />
@@ -256,10 +366,10 @@ export default function CreatePostPage() {
               </div>
             )}
 
-            {/* Preview */}
-            {imageUrl && (
+            {/* Bug 4: Preview with drawing overlay */}
+            {(previewUrl || imageUrl) && (
               <div className="relative mb-6 rounded-xl overflow-hidden">
-                <img src={imageUrl} alt="Preview" className="w-full" />
+                <img src={previewUrl || imageUrl!} alt="Preview" className="w-full" />
               </div>
             )}
 
@@ -296,7 +406,7 @@ export default function CreatePostPage() {
               <label className="block text-sm font-medium mb-2">Post Type</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
-                  onClick={() => setPostType('persistent')}
+                  onClick={() => handlePostTypeChange('persistent')}
                   className={`p-3 rounded-xl text-center ${
                     postType === 'persistent'
                       ? 'bg-eidola-teal text-white'
@@ -307,7 +417,7 @@ export default function CreatePostPage() {
                   <span className="text-xs">Persistent</span>
                 </button>
                 <button
-                  onClick={() => setPostType('temporary')}
+                  onClick={() => handlePostTypeChange('temporary')}
                   className={`p-3 rounded-xl text-center ${
                     postType === 'temporary'
                       ? 'bg-eidola-orange text-white'
@@ -318,7 +428,7 @@ export default function CreatePostPage() {
                   <span className="text-xs">Temporary</span>
                 </button>
                 <button
-                  onClick={() => setPostType('challenge')}
+                  onClick={() => handlePostTypeChange('challenge')}
                   className={`p-3 rounded-xl text-center ${
                     postType === 'challenge'
                       ? 'bg-eidola-magenta text-white'
@@ -376,8 +486,52 @@ export default function CreatePostPage() {
               </button>
             )}
 
-            {/* Challenge options */}
-            {(postType === 'challenge' || isChallenge) && (
+            {/* Bug 5: Challenge options - no redundant checkbox when postType is 'challenge' */}
+            {postType === 'challenge' ? (
+              // Show challenge settings directly when Challenge post type is selected
+              <div className="mb-6 p-4 bg-purple-50 rounded-xl">
+                <label className="font-medium mb-3 block">Challenge Settings</label>
+                <div className="mb-3">
+                  <label className="text-sm text-gray-600 block mb-2">Type</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setChallengeType('draw')}
+                      className={`flex-1 py-2 rounded-lg ${
+                        challengeType === 'draw' ? 'bg-eidola-magenta text-white' : 'bg-white'
+                      }`}
+                    >
+                      Draw
+                    </button>
+                    <button
+                      onClick={() => setChallengeType('text')}
+                      className={`flex-1 py-2 rounded-lg ${
+                        challengeType === 'text' ? 'bg-eidola-magenta text-white' : 'bg-white'
+                      }`}
+                    >
+                      Guess Text
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm text-gray-600 block mb-2">Difficulty</label>
+                  <div className="flex gap-2">
+                    {(['easy', 'medium', 'hard'] as const).map(diff => (
+                      <button
+                        key={diff}
+                        onClick={() => setChallengeDifficulty(diff)}
+                        className={`flex-1 py-2 rounded-lg capitalize ${
+                          challengeDifficulty === diff ? 'bg-eidola-magenta text-white' : 'bg-white'
+                        }`}
+                      >
+                        {diff}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : isChallenge ? (
+              // Show challenge toggle for other post types if already enabled
               <div className="mb-6 p-4 bg-purple-50 rounded-xl">
                 <div className="flex items-center justify-between mb-3">
                   <label className="font-medium">Challenge Mode</label>
@@ -389,50 +543,46 @@ export default function CreatePostPage() {
                   />
                 </div>
 
-                {isChallenge && (
-                  <>
-                    <div className="mb-3">
-                      <label className="text-sm text-gray-600 block mb-2">Type</label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setChallengeType('draw')}
-                          className={`flex-1 py-2 rounded-lg ${
-                            challengeType === 'draw' ? 'bg-eidola-magenta text-white' : 'bg-white'
-                          }`}
-                        >
-                          Draw
-                        </button>
-                        <button
-                          onClick={() => setChallengeType('text')}
-                          className={`flex-1 py-2 rounded-lg ${
-                            challengeType === 'text' ? 'bg-eidola-magenta text-white' : 'bg-white'
-                          }`}
-                        >
-                          Guess Text
-                        </button>
-                      </div>
-                    </div>
+                <div className="mb-3">
+                  <label className="text-sm text-gray-600 block mb-2">Type</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setChallengeType('draw')}
+                      className={`flex-1 py-2 rounded-lg ${
+                        challengeType === 'draw' ? 'bg-eidola-magenta text-white' : 'bg-white'
+                      }`}
+                    >
+                      Draw
+                    </button>
+                    <button
+                      onClick={() => setChallengeType('text')}
+                      className={`flex-1 py-2 rounded-lg ${
+                        challengeType === 'text' ? 'bg-eidola-magenta text-white' : 'bg-white'
+                      }`}
+                    >
+                      Guess Text
+                    </button>
+                  </div>
+                </div>
 
-                    <div>
-                      <label className="text-sm text-gray-600 block mb-2">Difficulty</label>
-                      <div className="flex gap-2">
-                        {(['easy', 'medium', 'hard'] as const).map(diff => (
-                          <button
-                            key={diff}
-                            onClick={() => setChallengeDifficulty(diff)}
-                            className={`flex-1 py-2 rounded-lg capitalize ${
-                              challengeDifficulty === diff ? 'bg-eidola-magenta text-white' : 'bg-white'
-                            }`}
-                          >
-                            {diff}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
+                <div>
+                  <label className="text-sm text-gray-600 block mb-2">Difficulty</label>
+                  <div className="flex gap-2">
+                    {(['easy', 'medium', 'hard'] as const).map(diff => (
+                      <button
+                        key={diff}
+                        onClick={() => setChallengeDifficulty(diff)}
+                        className={`flex-1 py-2 rounded-lg capitalize ${
+                          challengeDifficulty === diff ? 'bg-eidola-magenta text-white' : 'bg-white'
+                        }`}
+                      >
+                        {diff}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-            )}
+            ) : null}
 
             {/* Tags */}
             <div className="mb-6">
@@ -465,17 +615,21 @@ export default function CreatePostPage() {
 
       case 'location':
         return (
-          <LocationPicker
-            onSelect={(loc, addr) => {
-              setLocation(loc)
-              setAddress(addr)
-              setStep('details')
-            }}
-            onCancel={() => setStep('details')}
-          />
+          <div className="absolute inset-0 bg-white">
+            <LocationPicker
+              onSelect={(loc, addr) => {
+                setLocation(loc)
+                setAddress(addr)
+                setStep('details')
+              }}
+              onCancel={() => setStep('details')}
+              initialLocation={location}
+              initialAddress={address}
+            />
+          </div>
         )
     }
   }
 
-  return <div className="bg-white min-h-screen">{renderStep()}</div>
+  return <div className="flex-1 bg-white overflow-hidden relative">{renderStep()}</div>
 }
