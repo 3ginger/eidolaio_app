@@ -24,6 +24,7 @@ interface PostRow {
   is_challenge: boolean
   challenge_type: string | null
   challenge_difficulty: string | null
+  chain_parent_id: number | null
   likes_count: number
   comments_count: number
   checkins_count: number
@@ -404,6 +405,7 @@ function formatPost(post: PostRow) {
     isChallenge: post.is_challenge,
     challengeType: post.challenge_type,
     challengeDifficulty: post.challenge_difficulty,
+    chainParentId: post.chain_parent_id,
     likesCount: post.likes_count,
     commentsCount: post.comments_count,
     checkinsCount: post.checkins_count,

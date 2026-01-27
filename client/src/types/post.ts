@@ -38,6 +38,10 @@ export interface Post {
   challengeType?: ChallengeType
   challengeDifficulty?: ChallengeDifficulty
 
+  // Chain
+  chainParentId?: number // If this post is part of a chain, the original post ID
+  chainEntryCount?: number // Number of entries in this post's chain
+
   // Engagement
   likesCount: number
   commentsCount: number

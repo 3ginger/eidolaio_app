@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useUser } from '../hooks/useUser'
 import { useTags } from '../hooks/usePosts'
 import { SignOutButton } from '@clerk/clerk-react'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import Avatar from '../components/ui/Avatar'
+import Alert from '../components/ui/Alert'
 import { ChevronLeft, User, Tag, LogOut, Loader2 } from 'lucide-react'
 
 const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
@@ -31,11 +34,7 @@ export default function SettingsPage() {
   })
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-      </div>
-    )
+    return <LoadingSpinner fullHeight />
   }
 
   const handleSaveProfile = async () => {
@@ -90,26 +89,13 @@ export default function SettingsPage() {
               <h2 className="text-xl font-bold">Edit Profile</h2>
             </div>
 
-            {error && (
-              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg text-sm">
-                Saved successfully!
-              </div>
-            )}
+            {error && <Alert type="error" message={error} className="mb-4" />}
+            {success && <Alert type="success" message="Saved successfully!" className="mb-4" />}
 
             {/* Avatar */}
             <div className="flex justify-center mb-6">
               <div className="relative">
-                <img
-                  src={user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}`}
-                  alt="Avatar"
-                  className="w-24 h-24 rounded-full"
-                />
+                <Avatar user={{ avatarUrl: user?.avatarUrl, username: user?.username }} size="xl" className="w-24 h-24" />
                 <button className="absolute bottom-0 right-0 p-2 bg-eidola-orange rounded-full text-white">
                   <User className="w-4 h-4" />
                 </button>
@@ -174,17 +160,8 @@ export default function SettingsPage() {
               Select topics you're interested in to personalize your feed
             </p>
 
-            {error && (
-              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg text-sm">
-                Saved successfully!
-              </div>
-            )}
+            {error && <Alert type="error" message={error} className="mb-4" />}
+            {success && <Alert type="success" message="Saved successfully!" className="mb-4" />}
 
             <div className="flex flex-wrap gap-2 mb-6">
               {availableTags.map(tag => (

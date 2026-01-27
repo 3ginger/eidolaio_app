@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { get, patch, del } from '../utils/api'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import EmptyState from '../components/ui/EmptyState'
+import Alert from '../components/ui/Alert'
+import TabGroup from '../components/ui/TabGroup'
 import {
   Shield,
   AlertTriangle,
@@ -12,7 +16,6 @@ import {
   X,
   Trash2,
   ExternalLink,
-  Loader2,
   ChevronLeft
 } from 'lucide-react'
 
@@ -140,19 +143,13 @@ export default function AdminPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-      </div>
-    )
+    return <LoadingSpinner fullHeight />
   }
 
   if (error) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-red-100 text-red-700 rounded-lg p-4">
-          {error}
-        </div>
+        <Alert type="error" message={error} />
       </div>
     )
   }
@@ -208,30 +205,21 @@ export default function AdminPage() {
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold">Reports</h2>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFilter('pending')}
-              className={`px-3 py-1 rounded-full text-sm ${
-                filter === 'pending' ? 'bg-eidola-orange text-white' : 'bg-gray-100'
-              }`}
-            >
-              Pending
-            </button>
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1 rounded-full text-sm ${
-                filter === 'all' ? 'bg-eidola-orange text-white' : 'bg-gray-100'
-              }`}
-            >
-              All
-            </button>
-          </div>
+          <TabGroup
+            tabs={[
+              { value: 'pending' as const, label: 'Pending' },
+              { value: 'all' as const, label: 'All' },
+            ]}
+            value={filter}
+            onChange={setFilter}
+          />
         </div>
 
         {reports.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No {filter === 'pending' ? 'pending ' : ''}reports found
-          </div>
+          <EmptyState
+            title={`No ${filter === 'pending' ? 'pending ' : ''}reports found`}
+            className="py-8"
+          />
         ) : (
           <div className="divide-y">
             {reports.map(report => (

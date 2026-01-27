@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Post } from '../../types/post'
 import NSFWOverlay from '../common/NSFWOverlay'
-import { Heart, MessageCircle, MapPin, Clock, Trophy, Share2, Pencil, Image } from 'lucide-react'
+import Avatar from '../ui/Avatar'
+import DrawingToggleButton from '../ui/DrawingToggleButton'
+import { getTimeRemaining, formatRelativeDate } from '../../utils/dateTime'
+import { extractDrawingDataUrl, hasValidDrawing } from '../../utils/drawing'
+import { Heart, MessageCircle, MapPin, Clock, Trophy, Share2, Link2, Users } from 'lucide-react'
 
 interface PostCardProps {
   post: Post
@@ -16,11 +20,8 @@ export default function PostCard({ post, onLike }: PostCardProps) {
   const [heartAnimation, setHeartAnimation] = useState(false)
   const [showDrawing, setShowDrawing] = useState(false)
 
-  // Get drawing dataUrl if available
-  const drawingDataUrl = post.userDrawing && typeof post.userDrawing === 'object' && 'dataUrl' in post.userDrawing
-    ? (post.userDrawing as { dataUrl: string }).dataUrl
-    : null
-  const hasDrawing = !!drawingDataUrl && post.type !== 'challenge'
+  const drawingDataUrl = extractDrawingDataUrl(post.userDrawing)
+  const hasDrawing = hasValidDrawing(post.userDrawing, post.type)
 
   const handleLike = async () => {
     setIsLiked(!isLiked)
@@ -60,11 +61,7 @@ export default function PostCard({ post, onLike }: PostCardProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
         <Link to={`/profile/${post.user?.username}`} className="flex items-center gap-3">
-          <img
-            src={post.user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user?.username}`}
-            alt={post.user?.username}
-            className="w-9 h-9 rounded-full"
-          />
+          <Avatar user={{ avatarUrl: post.user?.avatarUrl, username: post.user?.username }} />
           <div>
             <span className="font-semibold text-sm">@{post.user?.username}</span>
             {post.address && (
@@ -123,20 +120,14 @@ export default function PostCard({ post, onLike }: PostCardProps) {
 
         {/* Drawing toggle button */}
         {hasDrawing && !post.isNsfw && (
-          <button
-            onClick={(e) => {
+          <DrawingToggleButton
+            showDrawing={showDrawing}
+            onToggle={(e) => {
               e.preventDefault()
               setShowDrawing(!showDrawing)
             }}
-            className="absolute bottom-3 right-3 w-9 h-9 bg-black/50 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center transition-all hover:bg-black/70 z-10"
-            title={showDrawing ? 'Show original' : 'Show drawing'}
-          >
-            {showDrawing ? (
-              <Image className="w-5 h-5 text-white" />
-            ) : (
-              <Pencil className="w-5 h-5 text-white" />
-            )}
-          </button>
+            className="absolute bottom-3 right-3 z-10"
+          />
         )}
       </div>
 
@@ -187,53 +178,36 @@ export default function PostCard({ post, onLike }: PostCardProps) {
         </div>
       )}
 
+      {/* Chain linkage */}
+      {(post.chainParentId || (post.chainEntryCount && post.chainEntryCount > 0)) && (
+        <div className="px-4 pb-3 flex items-center gap-3">
+          {post.chainParentId && (
+            <Link
+              to={`/post/${post.chainParentId}`}
+              className="flex items-center gap-1.5 text-sm text-eidola-teal hover:underline"
+            >
+              <Link2 className="w-4 h-4" />
+              Part of a chain
+            </Link>
+          )}
+          {post.chainEntryCount && post.chainEntryCount > 0 && (
+            <Link
+              to={`/chain/${post.id}`}
+              className="flex items-center gap-1.5 text-sm text-eidola-teal hover:underline"
+            >
+              <Users className="w-4 h-4" />
+              {post.chainEntryCount} {post.chainEntryCount === 1 ? 'visitor' : 'visitors'}
+            </Link>
+          )}
+        </div>
+      )}
+
       {/* Timestamp */}
       <div className="px-4 pb-4">
         <time className="text-xs text-gray-400">
-          {formatDate(new Date(post.createdAt))}
+          {formatRelativeDate(new Date(post.createdAt))}
         </time>
       </div>
     </article>
   )
-}
-
-function getTimeRemaining(expiresAt: Date): string {
-  const now = new Date()
-  const diff = expiresAt.getTime() - now.getTime()
-
-  if (diff <= 0) return 'Expired'
-
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
-  if (hours > 24) {
-    return `${Math.floor(hours / 24)}d`
-  }
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`
-  }
-  return `${minutes}m`
-}
-
-function formatDate(date: Date): string {
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const seconds = Math.floor(diff / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-
-  if (days > 7) {
-    return date.toLocaleDateString()
-  }
-  if (days > 0) {
-    return `${days}d ago`
-  }
-  if (hours > 0) {
-    return `${hours}h ago`
-  }
-  if (minutes > 0) {
-    return `${minutes}m ago`
-  }
-  return 'Just now'
 }

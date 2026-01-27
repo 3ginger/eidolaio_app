@@ -9,6 +9,7 @@ import CreatePostPage from './pages/CreatePostPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
+import ChainFeedPage from './pages/ChainFeedPage'
 import Header from './components/layout/Header'
 import MobileNav from './components/layout/MobileNav'
 
@@ -85,6 +86,13 @@ export default function App() {
           <ProtectedRoute>
             <AppLayout>
               <PostDetailPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/chain/:postId" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <ChainFeedPage />
             </AppLayout>
           </ProtectedRoute>
         } />

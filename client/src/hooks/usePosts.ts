@@ -1,116 +1,24 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { get, post, del } from '../utils/api'
+import { usePaginatedData } from './usePaginatedData'
 import type { Post, Comment, Tag } from '../types/post'
 
-interface PostsResponse {
-  posts: Post[]
-  page: number
-  hasMore: boolean
-}
-
-interface UsePostsReturn {
-  posts: Post[]
-  isLoading: boolean
-  error: string | null
-  hasMore: boolean
-  loadMore: () => Promise<void>
-  refresh: () => Promise<void>
-}
-
-export function useFeed(): UsePostsReturn {
-  const { getToken } = useAuth()
-  const [posts, setPosts] = useState<Post[]>([])
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchPosts = useCallback(async (pageNum: number, append = false) => {
-    try {
-      setIsLoading(true)
-      setError(null)
-      const token = await getToken()
-      const data = await get<PostsResponse>('/feed', { page: pageNum }, token)
-
-      if (append) {
-        setPosts(prev => [...prev, ...data.posts])
-      } else {
-        setPosts(data.posts)
-      }
-      setHasMore(data.hasMore)
-      setPage(pageNum)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch posts')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [getToken])
-
-  useEffect(() => {
-    fetchPosts(1)
-  }, [fetchPosts])
-
-  const loadMore = async () => {
-    if (hasMore && !isLoading) {
-      await fetchPosts(page + 1, true)
-    }
-  }
-
-  const refresh = async () => {
-    await fetchPosts(1)
-  }
-
-  return { posts, isLoading, error, hasMore, loadMore, refresh }
+export function useFeed() {
+  const { items: posts, ...rest } = usePaginatedData<Post>({
+    endpoint: '/feed',
+    requiresAuth: true,
+  })
+  return { posts, ...rest }
 }
 
 export function useExplorePosts(lat?: number, lng?: number) {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchPosts = useCallback(async (pageNum: number, append = false) => {
-    try {
-      setIsLoading(true)
-      const params: Record<string, number> = { page: pageNum }
-      if (lat && lng) {
-        params.lat = lat
-        params.lng = lng
-      }
-      const data = await get<PostsResponse>('/feed/explore', params)
-
-      if (append) {
-        setPosts(prev => [...prev, ...data.posts])
-      } else {
-        setPosts(data.posts)
-      }
-      setHasMore(data.hasMore)
-      setPage(pageNum)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch posts')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [lat, lng])
-
-  useEffect(() => {
-    fetchPosts(1)
-  }, [fetchPosts])
-
-  return {
-    posts,
-    isLoading,
-    error,
-    hasMore,
-    loadMore: async () => {
-      if (hasMore && !isLoading) {
-        await fetchPosts(page + 1, true)
-      }
-    },
-    refresh: () => fetchPosts(1)
-  }
+  const params = lat && lng ? { lat, lng } : undefined
+  const { items: posts, ...rest } = usePaginatedData<Post>({
+    endpoint: '/feed/explore',
+    params,
+  })
+  return { posts, ...rest }
 }
 
 export function usePost(postId: number | undefined) {

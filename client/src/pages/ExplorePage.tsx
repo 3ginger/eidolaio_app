@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { get } from '../utils/api'
 import MapView from '../components/map/MapView'
-import { List, Map as MapIcon, Loader2, MapPin } from 'lucide-react'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import EmptyState from '../components/ui/EmptyState'
+import { List, Map as MapIcon, MapPin } from 'lucide-react'
 
 interface MapPost {
   id: number
@@ -75,9 +77,7 @@ export default function ExplorePage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-full">
-          <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-        </div>
+        <LoadingSpinner className="h-full" />
       ) : view === 'map' ? (
         <MapView
           posts={posts}
@@ -87,10 +87,11 @@ export default function ExplorePage() {
       ) : (
         <div className="overflow-y-auto h-full">
           {posts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4">
-              <MapPin className="w-12 h-12 text-gray-300" />
-              <p className="text-gray-500">No discoveries nearby</p>
-            </div>
+            <EmptyState
+              icon={<MapPin className="w-12 h-12" />}
+              title="No discoveries nearby"
+              className="h-full"
+            />
           ) : (
             <div className="grid grid-cols-2 gap-2 p-2">
               {posts.map(post => (

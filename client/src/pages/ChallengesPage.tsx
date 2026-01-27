@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { get } from '../utils/api'
-import { Loader2, Trophy, Pencil, Type } from 'lucide-react'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import EmptyState from '../components/ui/EmptyState'
+import TabGroup from '../components/ui/TabGroup'
+import { Trophy, Pencil, Type } from 'lucide-react'
 
 interface Challenge {
   id: number
@@ -59,37 +62,31 @@ export default function ChallengesPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-6">
-        {(['all', 'draw', 'text'] as const).map(type => (
-          <button
-            key={type}
-            onClick={() => setFilter(type)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              filter === type
-                ? 'bg-eidola-orange text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {type === 'draw' && <Pencil className="w-4 h-4 inline mr-1" />}
-            {type === 'text' && <Type className="w-4 h-4 inline mr-1" />}
-            {type.charAt(0).toUpperCase() + type.slice(1)}
-          </button>
-        ))}
+      <div className="mb-6">
+        <TabGroup
+          tabs={[
+            { value: 'all' as const, label: 'All' },
+            { value: 'draw' as const, label: 'Draw', icon: <Pencil className="w-4 h-4" /> },
+            { value: 'text' as const, label: 'Text', icon: <Type className="w-4 h-4" /> },
+          ]}
+          value={filter}
+          onChange={setFilter}
+        />
       </div>
 
       {/* Challenges grid */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-        </div>
+        <LoadingSpinner className="py-12" />
       ) : challenges.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-4">
-          <Trophy className="w-16 h-16 text-gray-300" />
-          <p className="text-gray-500">No challenges yet</p>
-          <Link to="/create" className="btn-gradient px-6 py-2 rounded-full text-white">
-            Create One
-          </Link>
-        </div>
+        <EmptyState
+          icon={<Trophy className="w-16 h-16" />}
+          title="No challenges yet"
+          action={
+            <Link to="/create" className="btn-gradient px-6 py-2 rounded-full text-white">
+              Create One
+            </Link>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {challenges.map(challenge => (

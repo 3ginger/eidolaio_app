@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Canvas, PencilBrush, FabricImage } from 'fabric'
+import { Canvas, PencilBrush, FabricImage, util, FabricObject } from 'fabric'
 import {
   Pencil,
   Eraser,
@@ -43,7 +43,10 @@ export default function FabricCanvas({ imageUrl, onSave, initialData }: FabricCa
   const saveToHistory = useCallback(() => {
     if (isUndoRedoRef.current || !fabricRef.current) return
 
-    const json = JSON.stringify(fabricRef.current.toJSON())
+    // Only save the drawing objects, not the entire canvas (which includes background)
+    const objects = fabricRef.current.getObjects()
+    const json = JSON.stringify(objects.map(obj => obj.toObject()))
+
     const newHistory = [...historyRef.current.slice(0, historyIndexRef.current + 1), json]
     historyRef.current = newHistory
     historyIndexRef.current = newHistory.length - 1
@@ -155,31 +158,24 @@ export default function FabricCanvas({ imageUrl, onSave, initialData }: FabricCa
     const newIndex = historyIndexRef.current - 1
     const canvas = fabricRef.current
 
-    canvas.loadFromJSON(JSON.parse(historyRef.current[newIndex]), () => {
-      // Recreate background image from URL (loadFromJSON doesn't preserve it)
-      FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
-        const scale = Math.min(canvas.width! / img.width!, canvas.height! / img.height!)
-        img.scale(scale)
-        img.set({
-          left: (canvas.width! - img.width! * scale) / 2,
-          top: (canvas.height! - img.height! * scale) / 2,
-          selectable: false,
-          evented: false,
-          originX: 'left',
-          originY: 'top',
-        })
-        canvas.backgroundImage = img
-        backgroundImageRef.current = img
+    // Remove all drawing objects (background stays)
+    canvas.getObjects().forEach(obj => canvas.remove(obj))
+
+    // Restore objects from history
+    const objectsJson = JSON.parse(historyRef.current[newIndex])
+    if (objectsJson.length > 0) {
+      util.enlivenObjects(objectsJson).then((enlivenedObjects) => {
+        (enlivenedObjects as FabricObject[]).forEach(obj => canvas.add(obj))
         canvas.renderAll()
       })
-      historyIndexRef.current = newIndex
-      setCurrentIndex(newIndex)
-      // Delay resetting flag to ensure no intermediate events are captured
-      setTimeout(() => {
-        isUndoRedoRef.current = false
-      }, 50)
-    })
-  }, [imageUrl])
+    } else {
+      canvas.renderAll()
+    }
+
+    historyIndexRef.current = newIndex
+    setCurrentIndex(newIndex)
+    setTimeout(() => { isUndoRedoRef.current = false }, 50)
+  }, [])
 
   const redo = useCallback(() => {
     if (historyIndexRef.current >= historyRef.current.length - 1 || !fabricRef.current) return
@@ -188,31 +184,24 @@ export default function FabricCanvas({ imageUrl, onSave, initialData }: FabricCa
     const newIndex = historyIndexRef.current + 1
     const canvas = fabricRef.current
 
-    canvas.loadFromJSON(JSON.parse(historyRef.current[newIndex]), () => {
-      // Recreate background image from URL (loadFromJSON doesn't preserve it)
-      FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
-        const scale = Math.min(canvas.width! / img.width!, canvas.height! / img.height!)
-        img.scale(scale)
-        img.set({
-          left: (canvas.width! - img.width! * scale) / 2,
-          top: (canvas.height! - img.height! * scale) / 2,
-          selectable: false,
-          evented: false,
-          originX: 'left',
-          originY: 'top',
-        })
-        canvas.backgroundImage = img
-        backgroundImageRef.current = img
+    // Remove all drawing objects (background stays)
+    canvas.getObjects().forEach(obj => canvas.remove(obj))
+
+    // Restore objects from history
+    const objectsJson = JSON.parse(historyRef.current[newIndex])
+    if (objectsJson.length > 0) {
+      util.enlivenObjects(objectsJson).then((enlivenedObjects) => {
+        (enlivenedObjects as FabricObject[]).forEach(obj => canvas.add(obj))
         canvas.renderAll()
       })
-      historyIndexRef.current = newIndex
-      setCurrentIndex(newIndex)
-      // Delay resetting flag to ensure no intermediate events are captured
-      setTimeout(() => {
-        isUndoRedoRef.current = false
-      }, 50)
-    })
-  }, [imageUrl])
+    } else {
+      canvas.renderAll()
+    }
+
+    historyIndexRef.current = newIndex
+    setCurrentIndex(newIndex)
+    setTimeout(() => { isUndoRedoRef.current = false }, 50)
+  }, [])
 
   const toggleEraser = () => {
     setIsEraser(!isEraser)

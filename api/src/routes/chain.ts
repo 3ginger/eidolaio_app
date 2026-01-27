@@ -137,13 +137,22 @@ router.post('/:postId/join', requireAuth, async (req: Request, res: Response) =>
         [postId]
       )
 
+      // Create a linked post so it appears in the feed
+      const userDrawing = req.body.userDrawing || null
+      await client.query(
+        `INSERT INTO eidola.posts (
+          user_id, type, image_url, user_caption, user_drawing,
+          chain_parent_id, location, address
+        )
+        SELECT $1, 'persistent', $2, $3, $4, $5, location, address
+        FROM eidola.posts WHERE id = $5`,
+        [req.userId, photoUrl, caption, JSON.stringify(userDrawing), postId]
+      )
+
       // Award points based on position (earlier = more points)
       const position = insertResult.rows[0].position
-      let points = 10 // base points
-      if (position === 1) points = 100 // discoverer (shouldn't happen via join, but just in case)
-      else if (position === 2) points = 50
-      else if (position === 3) points = 30
-      else if (position <= 10) points = 20
+      const POSITION_POINTS: Record<number, number> = { 1: 100, 2: 50, 3: 30 }
+      const points = POSITION_POINTS[position] ?? (position <= 10 ? 20 : 10)
 
       await client.query(
         'UPDATE eidola.users SET points = points + $1 WHERE id = $2',

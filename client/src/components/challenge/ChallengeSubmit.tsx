@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { post } from '../../utils/api'
 import FabricCanvas from '../drawing/FabricCanvas'
+import Alert from '../ui/Alert'
 import { X, Loader2, Trophy, Send } from 'lucide-react'
 
 interface ChallengeSubmitProps {
@@ -121,11 +122,7 @@ export default function ChallengeSubmit({ postId, type, imageUrl, onClose }: Cha
         </button>
       </div>
 
-      {error && (
-        <div className="mx-4 mt-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
+      {error && <Alert type="error" message={error} className="mx-4 mt-4" />}
 
       {type === 'draw' ? (
         // Drawing challenge

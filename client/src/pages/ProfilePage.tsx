@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useUser, useProfile } from '../hooks/useUser'
 import { get, post } from '../utils/api'
-import { Settings, Grid3X3, Trophy, MapPin, Loader2 } from 'lucide-react'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import EmptyState from '../components/ui/EmptyState'
+import Avatar from '../components/ui/Avatar'
+import TabGroup from '../components/ui/TabGroup'
+import { Settings, Grid3X3, Trophy, MapPin } from 'lucide-react'
 
 interface ProfilePost {
   id: number
@@ -60,11 +64,7 @@ export default function ProfilePage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-      </div>
-    )
+    return <LoadingSpinner fullHeight />
   }
 
   if (!user) {
@@ -90,11 +90,7 @@ export default function ProfilePage() {
       <div className="px-4 py-6">
         <div className="flex items-start justify-between mb-4">
           {/* Avatar */}
-          <img
-            src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
-            alt={user.username}
-            className="w-20 h-20 rounded-full border-4 border-white shadow-lg"
-          />
+          <Avatar user={user} size="xl" className="border-4 border-white shadow-lg" />
 
           {/* Actions */}
           <div className="flex gap-2">
@@ -151,56 +147,36 @@ export default function ProfilePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b">
-        <button
-          onClick={() => setActiveTab('posts')}
-          className={`flex-1 py-3 flex items-center justify-center gap-2 ${
-            activeTab === 'posts' ? 'border-b-2 border-eidola-orange text-eidola-orange' : 'text-gray-500'
-          }`}
-        >
-          <Grid3X3 className="w-5 h-5" />
-        </button>
-        <button
-          onClick={() => setActiveTab('challenges')}
-          className={`flex-1 py-3 flex items-center justify-center gap-2 ${
-            activeTab === 'challenges' ? 'border-b-2 border-eidola-orange text-eidola-orange' : 'text-gray-500'
-          }`}
-        >
-          <Trophy className="w-5 h-5" />
-        </button>
-        <button
-          onClick={() => setActiveTab('checkins')}
-          className={`flex-1 py-3 flex items-center justify-center gap-2 ${
-            activeTab === 'checkins' ? 'border-b-2 border-eidola-orange text-eidola-orange' : 'text-gray-500'
-          }`}
-        >
-          <MapPin className="w-5 h-5" />
-        </button>
-      </div>
+      <TabGroup
+        tabs={[
+          { value: 'posts' as const, icon: <Grid3X3 className="w-5 h-5" /> },
+          { value: 'challenges' as const, icon: <Trophy className="w-5 h-5" /> },
+          { value: 'checkins' as const, icon: <MapPin className="w-5 h-5" /> },
+        ]}
+        value={activeTab}
+        onChange={setActiveTab}
+        variant="underline"
+      />
 
       {/* Posts grid */}
       {postsLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-        </div>
+        <LoadingSpinner className="py-12" />
       ) : filteredPosts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-4">
-          <div className="text-4xl">
-            {activeTab === 'posts' && '📸'}
-            {activeTab === 'challenges' && '🏆'}
-            {activeTab === 'checkins' && '📍'}
-          </div>
-          <p className="text-gray-500">
-            {activeTab === 'posts' && 'No posts yet'}
-            {activeTab === 'challenges' && 'No challenges yet'}
-            {activeTab === 'checkins' && 'No check-ins yet'}
-          </p>
-          {isOwnProfile && (
-            <Link to="/create" className="btn-gradient px-6 py-2 rounded-full text-white">
-              Create One
-            </Link>
-          )}
-        </div>
+        <EmptyState
+          emoji={activeTab === 'posts' ? '📸' : activeTab === 'challenges' ? '🏆' : '📍'}
+          title={
+            activeTab === 'posts' ? 'No posts yet' :
+            activeTab === 'challenges' ? 'No challenges yet' :
+            'No check-ins yet'
+          }
+          action={
+            isOwnProfile ? (
+              <Link to="/create" className="btn-gradient px-6 py-2 rounded-full text-white">
+                Create One
+              </Link>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="grid grid-cols-3 gap-1 p-1">
           {filteredPosts.map(post => (

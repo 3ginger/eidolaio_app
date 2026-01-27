@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import L from 'leaflet'
 import { useGeolocation } from '../../hooks/useGeolocation'
-import { MapPin, Search, X, Loader2, Crosshair } from 'lucide-react'
+import LoadingSpinner from '../ui/LoadingSpinner'
+import { MapPin, Search, X, Crosshair } from 'lucide-react'
 
 interface LocationPickerProps {
   onSelect: (location: { lat: number; lng: number }, address: string) => void
@@ -16,6 +17,16 @@ interface SearchResult {
   lon: string
   display_name: string
 }
+
+// Helper to create marker icon
+const createMarkerIcon = () => L.divIcon({
+  className: 'custom-marker',
+  html: `<div class="w-10 h-10 flex items-center justify-center">
+    <div class="w-4 h-4 bg-eidola-orange rounded-full border-4 border-white shadow-lg"></div>
+  </div>`,
+  iconSize: [40, 40],
+  iconAnchor: [20, 20],
+})
 
 export default function LocationPicker({ onSelect, onCancel, initialLocation, initialAddress }: LocationPickerProps) {
   const mapRef = useRef<HTMLDivElement>(null)
@@ -62,26 +73,11 @@ export default function LocationPicker({ onSelect, onCancel, initialLocation, in
 
     // If there's an initial location, add the marker
     if (initialLocation) {
-      const icon = L.divIcon({
-        className: 'custom-marker',
-        html: `
-          <div class="w-10 h-10 flex items-center justify-center">
-            <div class="w-4 h-4 bg-eidola-orange rounded-full border-4 border-white shadow-lg"></div>
-          </div>
-        `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20],
-      })
-      markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], { icon, draggable: true }).addTo(map)
-
-      // Handle marker drag
-      markerRef.current.on('dragend', async () => {
-        const pos = markerRef.current?.getLatLng()
-        if (pos) {
-          await reverseGeocode(pos.lat, pos.lng)
-          setSelectedLocation({ lat: pos.lat, lng: pos.lng })
-        }
-      })
+      markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], {
+        icon: createMarkerIcon(),
+        draggable: true
+      }).addTo(map)
+      setupMarkerDragHandler(markerRef.current)
     } else {
       // Request location only if no initial location
       requestPermission()
@@ -100,6 +96,15 @@ export default function LocationPicker({ onSelect, onCancel, initialLocation, in
     }
   }, [lat, lng, selectedLocation])
 
+  // Setup drag handler for marker
+  const setupMarkerDragHandler = (marker: L.Marker) => {
+    marker.on('dragend', async () => {
+      const pos = marker.getLatLng()
+      await reverseGeocode(pos.lat, pos.lng)
+      setSelectedLocation({ lat: pos.lat, lng: pos.lng })
+    })
+  }
+
   // Set marker and reverse geocode
   const setMarkerAndReverse = async (lat: number, lng: number) => {
     if (!leafletMapRef.current) return
@@ -108,26 +113,11 @@ export default function LocationPicker({ onSelect, onCancel, initialLocation, in
     if (markerRef.current) {
       markerRef.current.setLatLng([lat, lng])
     } else {
-      const icon = L.divIcon({
-        className: 'custom-marker',
-        html: `
-          <div class="w-10 h-10 flex items-center justify-center">
-            <div class="w-4 h-4 bg-eidola-orange rounded-full border-4 border-white shadow-lg"></div>
-          </div>
-        `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20],
-      })
-      markerRef.current = L.marker([lat, lng], { icon, draggable: true }).addTo(leafletMapRef.current)
-
-      // Handle marker drag
-      markerRef.current.on('dragend', async () => {
-        const pos = markerRef.current?.getLatLng()
-        if (pos) {
-          await reverseGeocode(pos.lat, pos.lng)
-          setSelectedLocation({ lat: pos.lat, lng: pos.lng })
-        }
-      })
+      markerRef.current = L.marker([lat, lng], {
+        icon: createMarkerIcon(),
+        draggable: true
+      }).addTo(leafletMapRef.current)
+      setupMarkerDragHandler(markerRef.current)
     }
 
     // Reverse geocode
@@ -224,13 +214,15 @@ export default function LocationPicker({ onSelect, onCancel, initialLocation, in
             className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-xl focus:outline-none"
           />
           {isSearching && (
-            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-gray-400" />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <LoadingSpinner size="sm" color="default" />
+            </div>
           )}
         </div>
 
         {/* Search results */}
         {searchResults.length > 0 && (
-          <div className="absolute left-4 right-4 top-full bg-white border rounded-xl shadow-lg mt-1 z-50 max-h-64 overflow-y-auto">
+          <div className="absolute left-4 right-4 top-full bg-white border rounded-xl shadow-lg mt-1 z-[9999] max-h-64 overflow-y-auto">
             {searchResults.map(result => (
               <button
                 key={result.place_id}
@@ -257,7 +249,7 @@ export default function LocationPicker({ onSelect, onCancel, initialLocation, in
         className="absolute bottom-24 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center disabled:opacity-50"
       >
         {geoLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <LoadingSpinner size="sm" color="default" />
         ) : (
           <Crosshair className="w-5 h-5 text-eidola-teal" />
         )}

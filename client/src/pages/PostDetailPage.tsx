@@ -5,6 +5,13 @@ import { usePost, useComments, likePost, deletePost, reportPost } from '../hooks
 import PhotoChain from '../components/post/PhotoChain'
 import NSFWOverlay from '../components/common/NSFWOverlay'
 import ChallengeSubmit from '../components/challenge/ChallengeSubmit'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import Avatar from '../components/ui/Avatar'
+import Modal from '../components/ui/Modal'
+import Alert from '../components/ui/Alert'
+import DrawingToggleButton from '../components/ui/DrawingToggleButton'
+import { getTimeRemainingVerbose } from '../utils/dateTime'
+import { extractDrawingDataUrl } from '../utils/drawing'
 import {
   Heart,
   MessageCircle,
@@ -14,9 +21,7 @@ import {
   MoreHorizontal,
   Loader2,
   ChevronLeft,
-  Send,
-  Pencil,
-  Image
+  Send
 } from 'lucide-react'
 
 export default function PostDetailPage() {
@@ -64,11 +69,7 @@ export default function PostDetailPage() {
   const isOwnPost = post?.isOwner || false
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-      </div>
-    )
+    return <LoadingSpinner fullHeight />
   }
 
   if (error || !post) {
@@ -149,7 +150,7 @@ export default function PostDetailPage() {
   }
 
   const timeRemaining = post.expiresAt
-    ? getTimeRemaining(new Date(post.expiresAt))
+    ? getTimeRemainingVerbose(new Date(post.expiresAt))
     : null
 
   return (
@@ -160,11 +161,7 @@ export default function PostDetailPage() {
           <ChevronLeft className="w-6 h-6" />
         </Link>
         <div className="flex items-center gap-2">
-          <img
-            src={post.user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user?.username}`}
-            alt={post.user?.username}
-            className="w-8 h-8 rounded-full"
-          />
+          <Avatar user={{ avatarUrl: post.user?.avatarUrl, username: post.user?.username }} size="sm" />
           <span className="font-medium">@{post.user?.username}</span>
         </div>
         <div className="relative" ref={menuRef}>
@@ -201,10 +198,7 @@ export default function PostDetailPage() {
       {/* Image */}
       <div className="relative">
         {(() => {
-          // Get drawing dataUrl if available
-          const drawingDataUrl = post.userDrawing && typeof post.userDrawing === 'object' && 'dataUrl' in post.userDrawing
-            ? (post.userDrawing as { dataUrl: string }).dataUrl
-            : null
+          const drawingDataUrl = extractDrawingDataUrl(post.userDrawing)
           const hasDrawing = !!drawingDataUrl
           const displayUrl = showDrawing && drawingDataUrl ? drawingDataUrl : post.imageUrl
 
@@ -229,17 +223,11 @@ export default function PostDetailPage() {
 
               {/* Drawing toggle button - small icon in corner */}
               {hasDrawing && post.type !== 'challenge' && (
-                <button
-                  onClick={() => setShowDrawing(!showDrawing)}
-                  className="absolute bottom-3 right-3 w-9 h-9 bg-black/50 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center transition-all hover:bg-black/70"
-                  title={showDrawing ? 'Show original' : 'Show drawing'}
-                >
-                  {showDrawing ? (
-                    <Image className="w-5 h-5 text-white" />
-                  ) : (
-                    <Pencil className="w-5 h-5 text-white" />
-                  )}
-                </button>
+                <DrawingToggleButton
+                  showDrawing={showDrawing}
+                  onToggle={() => setShowDrawing(prev => !prev)}
+                  className="absolute bottom-3 right-3"
+                />
               )}
             </>
           )
@@ -349,10 +337,10 @@ export default function PostDetailPage() {
           <div className="space-y-4">
             {comments.map(comment => (
               <div key={comment.id} className="flex gap-3">
-                <img
-                  src={comment.user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.user?.username}`}
-                  alt={comment.user?.username}
-                  className="w-8 h-8 rounded-full flex-shrink-0"
+                <Avatar
+                  user={{ avatarUrl: comment.user?.avatarUrl, username: comment.user?.username }}
+                  size="sm"
+                  className="flex-shrink-0"
                 />
                 <div>
                   <span className="font-medium text-sm">@{comment.user?.username}</span>
@@ -396,79 +384,55 @@ export default function PostDetailPage() {
       )}
 
       {/* Report modal */}
-      {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl max-w-sm w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold mb-4">Report Post</h3>
+      <Modal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="Report Post"
+      >
+        {reportError && <Alert type="error" message={reportError} className="mb-4" />}
 
-            {reportError && (
-              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
-                {reportError}
-              </div>
-            )}
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Reason</label>
-              <select
-                value={reportReason}
-                onChange={(e) => setReportReason(e.target.value as typeof reportReason)}
-                className="w-full px-3 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
-              >
-                <option value="spam">Spam</option>
-                <option value="nsfw">NSFW content</option>
-                <option value="harassment">Harassment</option>
-                <option value="copyright">Copyright violation</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">Description (optional)</label>
-              <textarea
-                value={reportDescription}
-                onChange={(e) => setReportDescription(e.target.value)}
-                placeholder="Add more details..."
-                className="w-full px-3 py-2 bg-gray-100 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
-                rows={3}
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="flex-1 py-2 bg-gray-100 rounded-lg font-medium hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitReport}
-                disabled={reportSubmitting}
-                className="flex-1 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 disabled:opacity-50"
-              >
-                {reportSubmitting ? 'Submitting...' : 'Submit Report'}
-              </button>
-            </div>
-          </div>
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Reason</label>
+          <select
+            value={reportReason}
+            onChange={(e) => setReportReason(e.target.value as typeof reportReason)}
+            className="w-full px-3 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+          >
+            <option value="spam">Spam</option>
+            <option value="nsfw">NSFW content</option>
+            <option value="harassment">Harassment</option>
+            <option value="copyright">Copyright violation</option>
+            <option value="other">Other</option>
+          </select>
         </div>
-      )}
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">Description (optional)</label>
+          <textarea
+            value={reportDescription}
+            onChange={(e) => setReportDescription(e.target.value)}
+            placeholder="Add more details..."
+            className="w-full px-3 py-2 bg-gray-100 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+            rows={3}
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowReportModal(false)}
+            className="flex-1 py-2 bg-gray-100 rounded-lg font-medium hover:bg-gray-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submitReport}
+            disabled={reportSubmitting}
+            className="flex-1 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 disabled:opacity-50"
+          >
+            {reportSubmitting ? 'Submitting...' : 'Submit Report'}
+          </button>
+        </div>
+      </Modal>
     </div>
   )
-}
-
-function getTimeRemaining(expiresAt: Date): string {
-  const now = new Date()
-  const diff = expiresAt.getTime() - now.getTime()
-
-  if (diff <= 0) return 'Expired'
-
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
-  if (hours > 24) {
-    return `${Math.floor(hours / 24)}d left`
-  }
-  if (hours > 0) {
-    return `${hours}h ${minutes}m left`
-  }
-  return `${minutes}m left`
 }

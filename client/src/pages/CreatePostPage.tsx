@@ -1,12 +1,14 @@
-import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import { createPost } from '../hooks/usePosts'
 import { useTags } from '../hooks/usePosts'
+import { get, post as apiPost } from '../utils/api'
 import FabricCanvas from '../components/drawing/FabricCanvas'
 import ImagePositioner, { type ImageTransform } from '../components/drawing/ImagePositioner'
 import LocationPicker from '../components/map/LocationPicker'
 import TagSelector from '../components/post/TagSelector'
+import type { Post } from '../types/post'
 import {
   Camera,
   Upload,
@@ -16,7 +18,8 @@ import {
   AlertTriangle,
   X,
   ChevronRight,
-  Loader2
+  Loader2,
+  Link2
 } from 'lucide-react'
 
 type PostType = 'persistent' | 'temporary' | 'challenge'
@@ -82,11 +85,86 @@ const expirationOptions = [
   { label: '1 week', value: 168 },
 ]
 
+// Extracted component for chain context display
+function ChainContext({ post, label }: { post: Post; label: string }) {
+  return (
+    <div className="mb-6 p-4 bg-eidola-teal/10 rounded-xl">
+      <div className="flex items-center gap-2 mb-2">
+        <Link2 className="w-5 h-5 text-eidola-teal" />
+        <span className="font-medium text-eidola-teal">{label}</span>
+      </div>
+      <Link to={`/post/${post.id}`} className="flex items-center gap-3 text-sm">
+        <img
+          src={post.thumbnailUrl || post.imageUrl}
+          alt="Parent post"
+          className="w-12 h-12 rounded-lg object-cover"
+        />
+        <div className="flex-1 min-w-0">
+          <p className="font-medium truncate">@{post.user?.username}'s post</p>
+          {post.address && (
+            <p className="text-gray-500 truncate text-xs">
+              <MapPin className="w-3 h-3 inline mr-1" />
+              {post.address}
+            </p>
+          )}
+        </div>
+      </Link>
+    </div>
+  )
+}
+
+// Extracted component for challenge settings
+function ChallengeSettings({ type, setType, difficulty, setDifficulty }: {
+  type: 'draw' | 'text'
+  setType: (t: 'draw' | 'text') => void
+  difficulty: 'easy' | 'medium' | 'hard'
+  setDifficulty: (d: 'easy' | 'medium' | 'hard') => void
+}) {
+  return (
+    <>
+      <div className="mb-3">
+        <label className="text-sm text-gray-600 block mb-2">Type</label>
+        <div className="flex gap-2">
+          {(['draw', 'text'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setType(t)}
+              className={`flex-1 py-2 rounded-lg ${type === t ? 'bg-eidola-magenta text-white' : 'bg-white'}`}
+            >
+              {t === 'draw' ? 'Draw' : 'Guess Text'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="text-sm text-gray-600 block mb-2">Difficulty</label>
+        <div className="flex gap-2">
+          {(['easy', 'medium', 'hard'] as const).map(d => (
+            <button
+              key={d}
+              onClick={() => setDifficulty(d)}
+              className={`flex-1 py-2 rounded-lg capitalize ${difficulty === d ? 'bg-eidola-magenta text-white' : 'bg-white'}`}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function CreatePostPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { getToken } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { tags: availableTags } = useTags()
+
+  // Chain join mode
+  const joinChainId = searchParams.get('joinChain')
+  const [parentPost, setParentPost] = useState<Post | null>(null)
+  const [isLoadingParent, setIsLoadingParent] = useState(false)
 
   // Form state
   const [step, setStep] = useState<Step>('upload')
@@ -109,6 +187,27 @@ export default function CreatePostPage() {
   const [address, setAddress] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Fetch parent post when joining a chain
+  useEffect(() => {
+    if (!joinChainId) return
+
+    const fetchParentPost = async () => {
+      try {
+        setIsLoadingParent(true)
+        const token = await getToken()
+        const post = await get<Post>(`/posts/${joinChainId}`, undefined, token)
+        setParentPost(post)
+      } catch (err) {
+        console.error('Failed to fetch parent post:', err)
+        setError('Failed to load chain. The post may not exist.')
+      } finally {
+        setIsLoadingParent(false)
+      }
+    }
+
+    fetchParentPost()
+  }, [joinChainId, getToken])
 
   // Handle file selection - Bug 6: Clear error when selecting new file
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -192,6 +291,21 @@ export default function CreatePostPage() {
         : imageFile
       const uploadedUrl = await uploadImage(fileToUpload)
 
+      const token = await getToken()
+
+      // Chain join mode - submit to chain API
+      if (joinChainId && parentPost) {
+        await apiPost<{ position: number; badge: string; entryId: number }>(`/chain/${joinChainId}/join`, {
+          photoUrl: uploadedUrl,
+          caption: caption || undefined,
+          userDrawing: drawingData || undefined,
+        }, token)
+
+        // Navigate to the parent post to see the chain
+        navigate(`/post/${joinChainId}`)
+        return
+      }
+
       // Calculate expiration if temporary
       let expiresAt: string | undefined
       if (postType === 'temporary') {
@@ -201,7 +315,6 @@ export default function CreatePostPage() {
       }
 
       // Create post
-      const token = await getToken()
       const result = await createPost({
         type: postType,
         imageUrl: uploadedUrl,
@@ -230,6 +343,16 @@ export default function CreatePostPage() {
   const renderStep = () => {
     switch (step) {
       case 'upload':
+        // Show loading state while fetching parent post for chain join
+        if (joinChainId && isLoadingParent) {
+          return (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white px-4">
+              <Loader2 className="w-8 h-8 animate-spin text-eidola-teal mb-4" />
+              <p className="text-gray-500">Loading chain...</p>
+            </div>
+          )
+        }
+
         return (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white px-4">
             {/* Close button to exit create flow */}
@@ -240,10 +363,27 @@ export default function CreatePostPage() {
               <X className="w-6 h-6" />
             </button>
 
-            <h1 className="text-2xl font-bold mb-2">What did you spot?</h1>
+            {/* Chain join context */}
+            {joinChainId && parentPost && (
+              <div className="w-full max-w-sm">
+                <ChainContext post={parentPost} label="Joining Photo Chain" />
+              </div>
+            )}
+
+            <h1 className="text-2xl font-bold mb-2">
+              {joinChainId ? 'Add your photo' : 'What did you spot?'}
+            </h1>
             <p className="text-gray-500 text-center mb-8">
-              Take a photo or upload an image of a pareidolia you've discovered
+              {joinChainId
+                ? 'Take a photo at this location to join the chain'
+                : 'Take a photo or upload an image of a pareidolia you\'ve discovered'}
             </p>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm w-full max-w-sm">
+                {error}
+              </div>
+            )}
 
             <input
               ref={fileInputRef}
@@ -344,6 +484,58 @@ export default function CreatePostPage() {
         )
 
       case 'details':
+        // Simplified UI for chain join mode
+        if (joinChainId && parentPost) {
+          return (
+            <div className="absolute inset-0 px-4 py-4 pb-8 overflow-y-auto bg-white">
+              <div className="flex items-center justify-between mb-6">
+                <button onClick={() => setStep('draw')}>
+                  <X className="w-6 h-6" />
+                </button>
+                <h2 className="font-semibold">Join Chain</h2>
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="text-eidola-orange font-medium disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Join'}
+                </button>
+              </div>
+
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Chain context */}
+              <ChainContext post={parentPost} label="Adding to chain" />
+
+              {/* Preview with drawing overlay */}
+              {(previewUrl || imageUrl) && (
+                <div className="relative mb-6 rounded-xl overflow-hidden">
+                  <img src={previewUrl || imageUrl!} alt="Preview" className="w-full" />
+                </div>
+              )}
+
+              {/* Caption */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">
+                  What do you see? 👀
+                </label>
+                <textarea
+                  value={caption}
+                  onChange={e => setCaption(e.target.value)}
+                  placeholder="I see a face in this cloud..."
+                  className="w-full px-4 py-3 bg-gray-100 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+                  rows={3}
+                />
+              </div>
+            </div>
+          )
+        }
+
+        // Regular post creation UI
         return (
           <div className="absolute inset-0 px-4 py-4 pb-8 overflow-y-auto bg-white">
             <div className="flex items-center justify-between mb-6">
@@ -488,50 +680,16 @@ export default function CreatePostPage() {
 
             {/* Bug 5: Challenge options - no redundant checkbox when postType is 'challenge' */}
             {postType === 'challenge' ? (
-              // Show challenge settings directly when Challenge post type is selected
               <div className="mb-6 p-4 bg-purple-50 rounded-xl">
                 <label className="font-medium mb-3 block">Challenge Settings</label>
-                <div className="mb-3">
-                  <label className="text-sm text-gray-600 block mb-2">Type</label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setChallengeType('draw')}
-                      className={`flex-1 py-2 rounded-lg ${
-                        challengeType === 'draw' ? 'bg-eidola-magenta text-white' : 'bg-white'
-                      }`}
-                    >
-                      Draw
-                    </button>
-                    <button
-                      onClick={() => setChallengeType('text')}
-                      className={`flex-1 py-2 rounded-lg ${
-                        challengeType === 'text' ? 'bg-eidola-magenta text-white' : 'bg-white'
-                      }`}
-                    >
-                      Guess Text
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-600 block mb-2">Difficulty</label>
-                  <div className="flex gap-2">
-                    {(['easy', 'medium', 'hard'] as const).map(diff => (
-                      <button
-                        key={diff}
-                        onClick={() => setChallengeDifficulty(diff)}
-                        className={`flex-1 py-2 rounded-lg capitalize ${
-                          challengeDifficulty === diff ? 'bg-eidola-magenta text-white' : 'bg-white'
-                        }`}
-                      >
-                        {diff}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <ChallengeSettings
+                  type={challengeType}
+                  setType={setChallengeType}
+                  difficulty={challengeDifficulty}
+                  setDifficulty={setChallengeDifficulty}
+                />
               </div>
             ) : isChallenge ? (
-              // Show challenge toggle for other post types if already enabled
               <div className="mb-6 p-4 bg-purple-50 rounded-xl">
                 <div className="flex items-center justify-between mb-3">
                   <label className="font-medium">Challenge Mode</label>
@@ -542,45 +700,12 @@ export default function CreatePostPage() {
                     className="w-5 h-5 text-eidola-magenta rounded"
                   />
                 </div>
-
-                <div className="mb-3">
-                  <label className="text-sm text-gray-600 block mb-2">Type</label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setChallengeType('draw')}
-                      className={`flex-1 py-2 rounded-lg ${
-                        challengeType === 'draw' ? 'bg-eidola-magenta text-white' : 'bg-white'
-                      }`}
-                    >
-                      Draw
-                    </button>
-                    <button
-                      onClick={() => setChallengeType('text')}
-                      className={`flex-1 py-2 rounded-lg ${
-                        challengeType === 'text' ? 'bg-eidola-magenta text-white' : 'bg-white'
-                      }`}
-                    >
-                      Guess Text
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-600 block mb-2">Difficulty</label>
-                  <div className="flex gap-2">
-                    {(['easy', 'medium', 'hard'] as const).map(diff => (
-                      <button
-                        key={diff}
-                        onClick={() => setChallengeDifficulty(diff)}
-                        className={`flex-1 py-2 rounded-lg capitalize ${
-                          challengeDifficulty === diff ? 'bg-eidola-magenta text-white' : 'bg-white'
-                        }`}
-                      >
-                        {diff}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <ChallengeSettings
+                  type={challengeType}
+                  setType={setChallengeType}
+                  difficulty={challengeDifficulty}
+                  setDifficulty={setChallengeDifficulty}
+                />
               </div>
             ) : null}
 

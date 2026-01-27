@@ -1,6 +1,8 @@
 import { useAuth } from '@clerk/clerk-react'
 import { useFeed, likePost } from '../hooks/usePosts'
 import PostCard from '../components/post/PostCard'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import EmptyState from '../components/ui/EmptyState'
 import { Loader2, RefreshCw } from 'lucide-react'
 
 export default function FeedPage() {
@@ -8,11 +10,7 @@ export default function FeedPage() {
   const { posts, isLoading, error, hasMore, loadMore, refresh } = useFeed()
 
   if (isLoading && posts.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-eidola-orange" />
-      </div>
-    )
+    return <LoadingSpinner fullHeight />
   }
 
   if (error) {
@@ -32,13 +30,12 @@ export default function FeedPage() {
 
   if (posts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 px-4">
-        <div className="text-6xl">👀</div>
-        <h2 className="text-xl font-semibold text-eidola-text">Your feed is empty</h2>
-        <p className="text-gray-500 text-center">
-          Follow people or select interests to see pareidolia discoveries here
-        </p>
-      </div>
+      <EmptyState
+        emoji="👀"
+        title="Your feed is empty"
+        description="Follow people or select interests to see pareidolia discoveries here"
+        className="min-h-[50vh]"
+      />
     )
   }
 
