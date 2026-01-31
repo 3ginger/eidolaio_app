@@ -5,15 +5,18 @@ interface TagSelectorProps {
   selected: string[]
   onChange: (selected: string[]) => void
   maxTags?: number
+  disabled?: boolean
 }
 
 export default function TagSelector({
   tags,
   selected,
   onChange,
-  maxTags = 5
+  maxTags = 5,
+  disabled = false,
 }: TagSelectorProps) {
   const toggleTag = (tagName: string) => {
+    if (disabled) return
     if (selected.includes(tagName)) {
       onChange(selected.filter(t => t !== tagName))
     } else if (selected.length < maxTags) {
@@ -30,7 +33,8 @@ export default function TagSelector({
             <button
               key={tag}
               onClick={() => toggleTag(tag)}
-              className="px-3 py-1 bg-eidola-orange text-white rounded-full text-sm flex items-center gap-1"
+              disabled={disabled}
+              className="px-3 py-1 bg-eidola-orange text-white rounded-full text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               #{tag}
               <span className="ml-1">×</span>
@@ -47,7 +51,7 @@ export default function TagSelector({
             <button
               key={tag.id}
               onClick={() => toggleTag(tag.name)}
-              disabled={selected.length >= maxTags}
+              disabled={disabled || selected.length >= maxTags}
               className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               #{tag.name}

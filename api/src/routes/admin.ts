@@ -169,6 +169,7 @@ router.delete('/posts/:id', requireAdmin, async (req: Request, res: Response) =>
 // Admin stats
 router.get('/stats', requireAdmin, async (req: Request, res: Response) => {
   try {
+    // Exclude test users from stats
     const stats = await getOne<{
       total_posts: number
       total_users: number
@@ -176,10 +177,10 @@ router.get('/stats', requireAdmin, async (req: Request, res: Response) => {
       flagged_posts: number
     }>(
       `SELECT
-        (SELECT COUNT(*) FROM eidola.posts) as total_posts,
-        (SELECT COUNT(*) FROM eidola.users) as total_users,
+        (SELECT COUNT(*) FROM eidola.posts p JOIN eidola.users u ON p.user_id = u.id WHERE COALESCE(u.is_test_user, false) = false) as total_posts,
+        (SELECT COUNT(*) FROM eidola.users WHERE COALESCE(is_test_user, false) = false) as total_users,
         (SELECT COUNT(*) FROM eidola.reports WHERE status = 'pending') as pending_reports,
-        (SELECT COUNT(*) FROM eidola.posts WHERE moderation_status = 'flagged') as flagged_posts`
+        (SELECT COUNT(*) FROM eidola.posts p JOIN eidola.users u ON p.user_id = u.id WHERE moderation_status = 'flagged' AND COALESCE(u.is_test_user, false) = false) as flagged_posts`
     )
 
     res.json({

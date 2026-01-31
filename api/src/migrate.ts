@@ -1,5 +1,5 @@
 // Database migration script
-import { readFileSync } from 'fs'
+import { readFileSync, readdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import pool from './services/db.js'
@@ -16,12 +16,38 @@ async function migrate() {
   }
 
   try {
-    // Read migration file
-    const migrationPath = join(__dirname, '../migrations/001_initial_schema.sql')
-    const sql = readFileSync(migrationPath, 'utf-8')
+    // Create migrations tracking table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS eidola.migrations (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) UNIQUE NOT NULL,
+        applied_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
 
-    // Execute migration
-    await pool.query(sql)
+    // Get list of migration files
+    const migrationsDir = join(__dirname, '../migrations')
+    const files = readdirSync(migrationsDir)
+      .filter(f => f.endsWith('.sql'))
+      .sort()
+
+    // Get already applied migrations
+    const applied = await pool.query('SELECT filename FROM eidola.migrations')
+    const appliedSet = new Set(applied.rows.map(r => r.filename))
+
+    // Run pending migrations
+    for (const file of files) {
+      if (appliedSet.has(file)) {
+        console.log(`Skipping ${file} (already applied)`)
+        continue
+      }
+
+      console.log(`Applying ${file}...`)
+      const sql = readFileSync(join(migrationsDir, file), 'utf-8')
+      await pool.query(sql)
+      await pool.query('INSERT INTO eidola.migrations (filename) VALUES ($1)', [file])
+      console.log(`Applied ${file}`)
+    }
 
     console.log('Migration completed successfully!')
   } catch (error) {

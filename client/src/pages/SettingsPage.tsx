@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../hooks/useUser'
 import { useTags } from '../hooks/usePosts'
+import { useFormSubmit } from '../hooks/useFormSubmit'
 import { SignOutButton } from '@clerk/clerk-react'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Avatar from '../components/ui/Avatar'
 import Alert from '../components/ui/Alert'
-import { ChevronLeft, User, Tag, LogOut, Loader2 } from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
+import { User, Tag, LogOut, Loader2 } from 'lucide-react'
 
 const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -20,8 +22,6 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState(user?.displayName || '')
   const [bio, setBio] = useState(user?.bio || '')
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   // Sync state when user loads
@@ -33,40 +33,32 @@ export default function SettingsPage() {
     }
   })
 
-  if (isLoading) {
-    return <LoadingSpinner fullHeight />
-  }
-
-  const handleSaveProfile = async () => {
-    try {
-      setIsSaving(true)
-      setError(null)
+  // Profile save handler
+  const { submit: saveProfile, isSubmitting: isSavingProfile, error: profileError, clearError: clearProfileError } = useFormSubmit({
+    onSubmit: async () => {
       await updateProfile({
         username: username !== user?.username ? username : undefined,
         displayName,
         bio,
       })
+    },
+    onSuccess: () => {
       setSuccess(true)
       setTimeout(() => setSuccess(false), 2000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setIsSaving(false)
-    }
-  }
+    },
+  })
 
-  const handleSaveInterests = async () => {
-    try {
-      setIsSaving(true)
-      setError(null)
-      await updateInterests(selectedInterests)
+  // Interests save handler
+  const { submit: saveInterests, isSubmitting: isSavingInterests, error: interestsError, clearError: clearInterestsError } = useFormSubmit({
+    onSubmit: () => updateInterests(selectedInterests),
+    onSuccess: () => {
       setSuccess(true)
       setTimeout(() => setSuccess(false), 2000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setIsSaving(false)
-    }
+    },
+  })
+
+  if (isLoading) {
+    return <LoadingSpinner fullHeight />
   }
 
   const toggleInterest = (tagName: string) => {
@@ -82,14 +74,13 @@ export default function SettingsPage() {
       case 'profile':
         return (
           <div className="px-4 py-4">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setActiveSection('main')} className="p-1 mr-2">
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <h2 className="text-xl font-bold">Edit Profile</h2>
-            </div>
+            <PageHeader
+              title="Edit Profile"
+              onBack={() => { setActiveSection('main'); clearProfileError() }}
+              className="border-none px-0 mb-6"
+            />
 
-            {error && <Alert type="error" message={error} className="mb-4" />}
+            {profileError && <Alert type="error" message={profileError} className="mb-4" />}
             {success && <Alert type="success" message="Saved successfully!" className="mb-4" />}
 
             {/* Avatar */}
@@ -137,11 +128,11 @@ export default function SettingsPage() {
             </div>
 
             <button
-              onClick={handleSaveProfile}
-              disabled={isSaving}
+              onClick={saveProfile}
+              disabled={isSavingProfile}
               className="w-full btn-gradient py-3 rounded-xl text-white font-medium disabled:opacity-50"
             >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Save Changes'}
+              {isSavingProfile ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Save Changes'}
             </button>
           </div>
         )
@@ -149,18 +140,17 @@ export default function SettingsPage() {
       case 'interests':
         return (
           <div className="px-4 py-4">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setActiveSection('main')} className="p-1 mr-2">
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <h2 className="text-xl font-bold">Interests</h2>
-            </div>
+            <PageHeader
+              title="Interests"
+              onBack={() => { setActiveSection('main'); clearInterestsError() }}
+              className="border-none px-0 mb-6"
+            />
 
             <p className="text-gray-500 mb-6">
               Select topics you're interested in to personalize your feed
             </p>
 
-            {error && <Alert type="error" message={error} className="mb-4" />}
+            {interestsError && <Alert type="error" message={interestsError} className="mb-4" />}
             {success && <Alert type="success" message="Saved successfully!" className="mb-4" />}
 
             <div className="flex flex-wrap gap-2 mb-6">
@@ -180,11 +170,11 @@ export default function SettingsPage() {
             </div>
 
             <button
-              onClick={handleSaveInterests}
-              disabled={isSaving}
+              onClick={saveInterests}
+              disabled={isSavingInterests}
               className="w-full btn-gradient py-3 rounded-xl text-white font-medium disabled:opacity-50"
             >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Save Interests'}
+              {isSavingInterests ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Save Interests'}
             </button>
           </div>
         )
@@ -192,12 +182,11 @@ export default function SettingsPage() {
       default:
         return (
           <div className="px-4 py-4">
-            <div className="flex items-center mb-6">
-              <button onClick={() => navigate(-1)} className="p-1 mr-2">
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <h1 className="text-xl font-bold">Settings</h1>
-            </div>
+            <PageHeader
+              title="Settings"
+              onBack={() => navigate(-1)}
+              className="border-none px-0 mb-6"
+            />
 
             <div className="space-y-2">
               <button

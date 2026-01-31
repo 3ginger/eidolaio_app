@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Check, X, RotateCcw, ZoomIn, Move } from 'lucide-react'
+import { ChevronLeft, X, RotateCcw, ZoomIn, Move } from 'lucide-react'
 
 export interface ImageTransform {
   x: number
@@ -14,6 +14,7 @@ interface ImagePositionerProps {
   imageUrl: string
   onDone: (transform: ImageTransform) => void
   onCancel: () => void
+  onExit?: () => void
 }
 
 interface TouchPoint {
@@ -22,7 +23,7 @@ interface TouchPoint {
   y: number
 }
 
-export default function ImagePositioner({ imageUrl, onDone, onCancel }: ImagePositionerProps) {
+export default function ImagePositioner({ imageUrl, onDone, onCancel, onExit }: ImagePositionerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [transform, setTransform] = useState<ImageTransform>({
     x: 0,
@@ -252,10 +253,17 @@ export default function ImagePositioner({ imageUrl, onDone, onCancel }: ImagePos
   return (
     <div className="h-[100dvh] flex flex-col bg-gray-900 overflow-hidden">
       {/* Header - fixed height */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-white border-b">
-        <button onClick={onCancel} className="p-1">
-          <X className="w-6 h-6" />
-        </button>
+      <div className="flex-shrink-0 flex items-center justify-between px-4 pt-4 pb-3 bg-white border-b">
+        <div className="flex items-center gap-2">
+          {onExit && (
+            <button onClick={onExit} className="p-1">
+              <X className="w-6 h-6" />
+            </button>
+          )}
+          <button onClick={onCancel} className="p-1">
+            <ChevronLeft className={`w-5 h-5 ${onExit ? 'text-gray-400' : ''}`} />
+          </button>
+        </div>
         <h2 className="font-semibold">Position your image</h2>
         <button
           onClick={() => onDone({
@@ -263,9 +271,9 @@ export default function ImagePositioner({ imageUrl, onDone, onCancel }: ImagePos
             containerWidth: containerSize.width,
             containerHeight: containerSize.height,
           })}
-          className="p-1 text-eidola-orange"
+          className="text-eidola-orange font-medium"
         >
-          <Check className="w-6 h-6" />
+          Next
         </button>
       </div>
 

@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
-import { usePost, useComments, likePost, deletePost, reportPost } from '../hooks/usePosts'
+import { usePost, useComments, likePost, deletePost, reportPost, susPost, realPost, confessPost } from '../hooks/usePosts'
+import { calculateConfessionPoints } from '../config/points'
+import { useClickOutside } from '../hooks/useClickOutside'
+import { useFormSubmit } from '../hooks/useFormSubmit'
+import { useToast } from '../contexts/ToastContext'
 import PhotoChain from '../components/post/PhotoChain'
 import NSFWOverlay from '../components/common/NSFWOverlay'
 import ChallengeSubmit from '../components/challenge/ChallengeSubmit'
@@ -21,12 +25,15 @@ import {
   MoreHorizontal,
   Loader2,
   ChevronLeft,
-  Send
+  Send,
+  Bot,
+  CheckCircle
 } from 'lucide-react'
 
 export default function PostDetailPage() {
   const { getToken } = useAuth()
   const navigate = useNavigate()
+  const { showSuccess, showInfo } = useToast()
   const { id } = useParams<{ id: string }>()
   const postId = id ? parseInt(id) : undefined
   const { post, isLoading, error } = usePost(postId)
@@ -39,32 +46,48 @@ export default function PostDetailPage() {
   const [showDrawing, setShowDrawing] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [isSus, setIsSus] = useState(false)
+  const [isReal, setIsReal] = useState(false)
+  const [susCount, setSusCount] = useState(0)
+  const [realCount, setRealCount] = useState(0)
+  const [isBusted, setIsBusted] = useState(false)
+  const [showConfetti, setShowConfetti] = useState(false)
   const [reportReason, setReportReason] = useState<'spam' | 'nsfw' | 'harassment' | 'copyright' | 'other'>('spam')
   const [reportDescription, setReportDescription] = useState('')
-  const [reportSubmitting, setReportSubmitting] = useState(false)
-  const [reportError, setReportError] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Sync like state when post loads
+  // Sync state when post loads
   useEffect(() => {
     if (post) {
       setIsLiked(post.isLiked || false)
       setLikesCount(post.likesCount)
+      setIsSus(post.isSus || false)
+      setIsReal(post.isReal || false)
+      setSusCount(post.susCount || 0)
+      setRealCount(post.realCount || 0)
+      setIsBusted(post.isBusted || false)
     }
   }, [post])
 
+  // Trust calculations
+  const totalVotes = susCount + realCount
+  const trustPercent = totalVotes > 0 ? Math.round((realCount / totalVotes) * 100) : 100
+
   // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false)
-      }
-    }
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showMenu])
+  useClickOutside(menuRef, () => setShowMenu(false), showMenu)
+
+  // Report submission
+  const { submit: submitReport, isSubmitting: reportSubmitting, error: reportError, clearError } = useFormSubmit({
+    onSubmit: async () => {
+      if (!postId) throw new Error('Post ID required')
+      const token = await getToken()
+      await reportPost(postId, reportReason, reportDescription || undefined, token)
+    },
+    onSuccess: () => {
+      setShowReportModal(false)
+      showSuccess('Report submitted. Thank you for helping keep our community safe.')
+    },
+  })
 
   const isOwnPost = post?.isOwner || false
 
@@ -107,14 +130,14 @@ export default function PostDetailPage() {
       })
     } else {
       await navigator.clipboard.writeText(window.location.href)
-      alert('Link copied!')
+      showInfo('Link copied!')
     }
   }
 
   const handleCopyLink = async () => {
     await navigator.clipboard.writeText(window.location.href)
     setShowMenu(false)
-    alert('Link copied!')
+    showInfo('Link copied!')
   }
 
   const handleDelete = async () => {
@@ -125,28 +148,58 @@ export default function PostDetailPage() {
     navigate('/feed')
   }
 
+  const handleSus = async () => {
+    if (!postId) return
+    const token = await getToken()
+    const wasReal = isReal
+    const wasSus = isSus
+    setIsSus(!isSus)
+    setSusCount(prev => isSus ? prev - 1 : prev + 1)
+    if (!isSus && wasReal) {
+      setIsReal(false)
+      setRealCount(prev => prev - 1)
+    }
+    const result = await susPost(postId, token)
+    if (!wasSus && result.pointsEarned && result.pointsEarned > 0) {
+      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+    }
+  }
+
+  const handleReal = async () => {
+    if (!postId) return
+    const token = await getToken()
+    const wasSus = isSus
+    const wasReal = isReal
+    setIsReal(!isReal)
+    setRealCount(prev => isReal ? prev - 1 : prev + 1)
+    if (!isReal && wasSus) {
+      setIsSus(false)
+      setSusCount(prev => prev - 1)
+    }
+    const result = await realPost(postId, token)
+    if (!wasReal && result.pointsEarned && result.pointsEarned > 0) {
+      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+    }
+  }
+
+  const handleConfess = async () => {
+    if (!postId || isBusted) return
+    const token = await getToken()
+    setShowConfetti(true)
+    setIsBusted(true)
+    const result = await confessPost(postId, token)
+    if (result.pointsEarned && result.pointsEarned > 0) {
+      showSuccess(`🎉 +${result.pointsEarned} points for being honest! Respect.`)
+    }
+    setTimeout(() => setShowConfetti(false), 2000)
+  }
+
   const handleReport = () => {
     setShowMenu(false)
     setShowReportModal(true)
     setReportReason('spam')
     setReportDescription('')
-    setReportError(null)
-  }
-
-  const submitReport = async () => {
-    if (!postId) return
-    try {
-      setReportSubmitting(true)
-      setReportError(null)
-      const token = await getToken()
-      await reportPost(postId, reportReason, reportDescription || undefined, token)
-      setShowReportModal(false)
-      alert('Report submitted. Thank you for helping keep our community safe.')
-    } catch (err) {
-      setReportError(err instanceof Error ? err.message : 'Failed to submit report')
-    } finally {
-      setReportSubmitting(false)
-    }
+    clearError()
   }
 
   const timeRemaining = post.expiresAt
@@ -250,6 +303,142 @@ export default function PostDetailPage() {
         </div>
       </div>
 
+      {/* Trust section */}
+      {!isBusted && (
+        <div className="px-4 py-4 border-b bg-gray-50">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="font-semibold text-sm">Is this real or AI?</h3>
+              <p className="text-xs text-gray-500">Help the community identify authentic content</p>
+            </div>
+            {totalVotes > 0 && (
+              <span className="text-sm font-medium" style={{ 
+                color: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626' 
+              }}>
+                {trustPercent}% trust
+              </span>
+            )}
+          </div>
+          
+          {/* Trust meter */}
+          {totalVotes > 0 && (
+            <div className="mb-3">
+              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                <span className="text-green-600">{realCount} say real</span>
+                <span>·</span>
+                <span className="text-purple-600">{susCount} suspect AI</span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full transition-all duration-300 rounded-full"
+                  style={{ 
+                    width: `${trustPercent}%`,
+                    backgroundColor: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Voting buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleReal}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-all ${
+                isReal 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-white border border-gray-200 text-gray-700 hover:border-green-300 hover:text-green-600'
+              }`}
+            >
+              <CheckCircle className="w-5 h-5" />
+              Real
+            </button>
+            <button
+              onClick={handleSus}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-all ${
+                isSus 
+                  ? 'bg-purple-500 text-white' 
+                  : 'bg-white border border-gray-200 text-gray-700 hover:border-purple-300 hover:text-purple-600'
+              }`}
+            >
+              <Bot className="w-5 h-5" />
+              AI?
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Busted banner */}
+      {isBusted && (
+        <div className="px-4 py-4 border-b bg-gradient-to-r from-purple-50 to-pink-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+              <Bot className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-purple-700">Busted! 🤖</h3>
+              <p className="text-sm text-gray-600">{susCount} {susCount === 1 ? 'person' : 'people'} called it — the author confirmed this is AI-generated</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confess banner for owner - different message based on trust level */}
+      {isOwnPost && !isBusted && (susCount > 0 || realCount > 0) && (() => {
+        const potentialPoints = calculateConfessionPoints(realCount, susCount)
+        const isTrusted = realCount > susCount
+        
+        return (
+          <div className={`mx-4 my-3 p-4 rounded-xl border ${
+            isTrusted 
+              ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200' 
+              : 'bg-gradient-to-r from-purple-50 to-pink-50 border-purple-100'
+          }`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1">
+                {isTrusted ? (
+                  <>
+                    <p className="font-medium text-green-700">
+                      🎭 People believe this is real ({realCount} vs {susCount})
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      But if you used AI, confess now for{' '}
+                      <span className="font-bold text-green-600">+{potentialPoints} points!</span>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-purple-700">
+                      {susCount} {susCount === 1 ? 'person thinks' : 'people think'} this is AI
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Confess and earn <span className="font-bold text-purple-600">+{potentialPoints} points</span>
+                    </p>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleConfess}
+                className={`px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity whitespace-nowrap ${
+                  isTrusted
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
+                    : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                }`}
+              >
+                {isTrusted ? `+${potentialPoints} pts 🤫` : `+${potentialPoints} pts 🤖`}
+              </button>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Confetti animation */}
+      {showConfetti && (
+        <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-50">
+          <div className="text-8xl animate-bounce">🎉</div>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div className="flex items-center gap-4">
@@ -326,7 +515,7 @@ export default function PostDetailPage() {
       )}
 
       {/* Comments */}
-      <div className="px-4 py-4">
+      <div className="px-4 py-4 pb-24">
         <h3 className="font-semibold mb-4">Comments</h3>
 
         {commentsLoading ? (
@@ -352,10 +541,10 @@ export default function PostDetailPage() {
         )}
       </div>
 
-      {/* Comment input */}
+      {/* Comment input - positioned above mobile nav */}
       <form
         onSubmit={handleComment}
-        className="sticky bottom-0 flex items-center gap-2 px-4 py-3 bg-white border-t"
+        className="sticky bottom-16 md:bottom-0 flex items-center gap-2 px-4 py-3 bg-white border-t"
       >
         <input
           type="text"

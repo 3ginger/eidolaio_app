@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useAuth } from '@clerk/clerk-react'
 import { post } from '../../utils/api'
 import FabricCanvas from '../drawing/FabricCanvas'
 import Alert from '../ui/Alert'
@@ -18,6 +19,7 @@ interface SubmitResult {
 }
 
 export default function ChallengeSubmit({ postId, type, imageUrl, onClose }: ChallengeSubmitProps) {
+  const { getToken } = useAuth()
   const [drawingData, setDrawingData] = useState<object | null>(null)
   const [textGuess, setTextGuess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -38,10 +40,11 @@ export default function ChallengeSubmit({ postId, type, imageUrl, onClose }: Cha
       setIsSubmitting(true)
       setError(null)
 
+      const token = await getToken()
       const data = await post<SubmitResult>(`/challenges/${postId}/submit`, {
         drawingData: type === 'draw' ? drawingData : undefined,
         textGuess: type === 'text' ? textGuess : undefined,
-      })
+      }, token)
 
       setResult(data)
     } catch (err) {

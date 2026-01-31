@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { get, patch, del } from '../utils/api'
+import { useAsyncData } from '../hooks/useAsyncData'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
 import Alert from '../components/ui/Alert'
 import TabGroup from '../components/ui/TabGroup'
+import PageHeader from '../components/ui/PageHeader'
+import StatCard from '../components/ui/StatCard'
 import {
   Shield,
   AlertTriangle,
@@ -15,8 +18,7 @@ import {
   Check,
   X,
   Trash2,
-  ExternalLink,
-  ChevronLeft
+  ExternalLink
 } from 'lucide-react'
 
 interface Report {
@@ -47,51 +49,35 @@ interface AdminStats {
 export default function AdminPage() {
   const { getToken } = useAuth()
   const navigate = useNavigate()
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [reports, setReports] = useState<Report[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'pending' | 'all'>('pending')
   const [actionLoading, setActionLoading] = useState<number | null>(null)
 
-  useEffect(() => {
-    fetchData()
-  }, [filter])
-
-  const fetchData = async () => {
-    try {
-      setIsLoading(true)
-      setError(null)
+  const { data, isLoading, error, refetch } = useAsyncData({
+    fetcher: async () => {
       const token = await getToken()
-
-      // Fetch stats and reports in parallel
       const [statsData, reportsData] = await Promise.all([
         get<AdminStats>('/admin/stats', undefined, token),
         get<{ reports: Report[] }>('/admin/reports', { status: filter === 'pending' ? 'pending' : undefined }, token)
       ])
-
-      setStats(statsData)
-      setReports(reportsData.reports)
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('Admin access required')) {
+      return { stats: statsData, reports: reportsData.reports }
+    },
+    deps: [filter],
+    onError: (err) => {
+      if (err.message.includes('Admin access required')) {
         navigate('/feed')
-        return
       }
-      setError(err instanceof Error ? err.message : 'Failed to fetch data')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    },
+  })
+
+  const stats = data?.stats ?? null
+  const reports = data?.reports ?? []
 
   const handleDismiss = async (reportId: number) => {
     try {
       setActionLoading(reportId)
       const token = await getToken()
       await patch(`/admin/reports/${reportId}`, { status: 'dismissed' }, token)
-      setReports(prev => prev.filter(r => r.id !== reportId))
-      if (stats) {
-        setStats({ ...stats, pendingReports: stats.pendingReports - 1 })
-      }
+      refetch()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to dismiss report')
     } finally {
@@ -104,14 +90,7 @@ export default function AdminPage() {
       setActionLoading(reportId)
       const token = await getToken()
       await patch(`/admin/reports/${reportId}`, { status: 'sustained' }, token)
-      setReports(prev => prev.filter(r => r.id !== reportId))
-      if (stats) {
-        setStats({
-          ...stats,
-          pendingReports: stats.pendingReports - 1,
-          flaggedPosts: stats.flaggedPosts + 1
-        })
-      }
+      refetch()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to sustain report')
     } finally {
@@ -127,14 +106,7 @@ export default function AdminPage() {
       setActionLoading(reportId)
       const token = await getToken()
       await del(`/admin/posts/${postId}`, token)
-      setReports(prev => prev.filter(r => r.postId !== postId))
-      if (stats) {
-        setStats({
-          ...stats,
-          totalPosts: stats.totalPosts - 1,
-          pendingReports: Math.max(0, stats.pendingReports - 1)
-        })
-      }
+      refetch()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete post')
     } finally {
@@ -156,48 +128,38 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/feed" className="p-1 hover:bg-gray-100 rounded-full">
-          <ChevronLeft className="w-6 h-6" />
-        </Link>
-        <div className="flex items-center gap-2">
-          <Shield className="w-6 h-6 text-eidola-orange" />
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        </div>
-      </div>
+      <PageHeader
+        title="Admin Dashboard"
+        backTo="/feed"
+        icon={<Shield className="w-6 h-6 text-eidola-orange" />}
+        className="mb-6 border-none px-0"
+      />
 
       {/* Stats Grid */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-4 shadow-sm border">
-            <div className="flex items-center gap-2 text-gray-500 mb-1">
-              <Image className="w-4 h-4" />
-              <span className="text-sm">Total Posts</span>
-            </div>
-            <div className="text-2xl font-bold">{stats.totalPosts}</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border">
-            <div className="flex items-center gap-2 text-gray-500 mb-1">
-              <Users className="w-4 h-4" />
-              <span className="text-sm">Total Users</span>
-            </div>
-            <div className="text-2xl font-bold">{stats.totalUsers}</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border">
-            <div className="flex items-center gap-2 text-orange-500 mb-1">
-              <Flag className="w-4 h-4" />
-              <span className="text-sm">Pending Reports</span>
-            </div>
-            <div className="text-2xl font-bold text-orange-500">{stats.pendingReports}</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border">
-            <div className="flex items-center gap-2 text-red-500 mb-1">
-              <AlertTriangle className="w-4 h-4" />
-              <span className="text-sm">Flagged Posts</span>
-            </div>
-            <div className="text-2xl font-bold text-red-500">{stats.flaggedPosts}</div>
-          </div>
+          <StatCard
+            icon={<Image className="w-4 h-4" />}
+            label="Total Posts"
+            value={stats.totalPosts}
+          />
+          <StatCard
+            icon={<Users className="w-4 h-4" />}
+            label="Total Users"
+            value={stats.totalUsers}
+          />
+          <StatCard
+            icon={<Flag className="w-4 h-4" />}
+            label="Pending Reports"
+            value={stats.pendingReports}
+            color="orange"
+          />
+          <StatCard
+            icon={<AlertTriangle className="w-4 h-4" />}
+            label="Flagged Posts"
+            value={stats.flaggedPosts}
+            color="red"
+          />
         </div>
       )}
 

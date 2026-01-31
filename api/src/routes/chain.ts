@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { query, getOne, getMany, transaction } from '../services/db.js'
+import { createNotification } from './notifications.js'
 
 const router = Router()
 
@@ -23,7 +24,7 @@ router.get('/:postId', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Photo chain only available for persistent posts' })
     }
 
-    // Get chain entries ordered by position
+    // Get chain entries ordered by position (exclude test users)
     const chain = await getMany<{
       id: number
       photo_url: string
@@ -39,6 +40,7 @@ router.get('/:postId', async (req: Request, res: Response) => {
        FROM eidola.photo_chain pc
        JOIN eidola.users u ON pc.user_id = u.id
        WHERE pc.post_id = $1
+         AND COALESCE(u.is_test_user, false) = false
        ORDER BY pc.position ASC`,
       [postId]
     )
@@ -161,6 +163,18 @@ router.post('/:postId/join', requireAuth, async (req: Request, res: Response) =>
 
       return { id: insertResult.rows[0].id, position, points }
     })
+
+    // Notify the original post owner
+    const postOwner = await getOne<{ user_id: number }>('SELECT user_id FROM eidola.posts WHERE id = $1', [postId])
+    if (postOwner && postOwner.user_id !== req.userId) {
+      createNotification({
+        userId: postOwner.user_id,
+        type: 'chain_join',
+        actorId: req.userId,
+        postId,
+        message: `joined your photo chain (position #${result.position})`,
+      })
+    }
 
     res.status(201).json({
       id: result.id,

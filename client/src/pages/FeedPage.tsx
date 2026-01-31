@@ -1,5 +1,7 @@
 import { useAuth } from '@clerk/clerk-react'
-import { useFeed, likePost } from '../hooks/usePosts'
+import { useFeed, likePost, susPost, realPost, confessPost } from '../hooks/usePosts'
+import { useToast } from '../contexts/ToastContext'
+import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import PostCard from '../components/post/PostCard'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
@@ -7,7 +9,16 @@ import { Loader2, RefreshCw } from 'lucide-react'
 
 export default function FeedPage() {
   const { getToken } = useAuth()
+  const { showSuccess } = useToast()
   const { posts, isLoading, error, hasMore, loadMore, refresh } = useFeed()
+
+  const {
+    isRefreshing,
+    pullDistance,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+  } = usePullToRefresh({ onRefresh: refresh })
 
   if (isLoading && posts.length === 0) {
     return <LoadingSpinner fullHeight />
@@ -44,21 +55,85 @@ export default function FeedPage() {
     await likePost(postId, token)
   }
 
+  const handleSus = async (postId: number) => {
+    const token = await getToken()
+    const result = await susPost(postId, token)
+    if (result.pointsEarned && result.pointsEarned > 0) {
+      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+    }
+  }
+
+  const handleReal = async (postId: number) => {
+    const token = await getToken()
+    const result = await realPost(postId, token)
+    if (result.pointsEarned && result.pointsEarned > 0) {
+      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+    }
+  }
+
+  const handleConfess = async (postId: number) => {
+    const token = await getToken()
+    const result = await confessPost(postId, token)
+    if (result.pointsEarned && result.pointsEarned > 0) {
+      showSuccess(`🎉 +${result.pointsEarned} points for being honest! Respect.`)
+    }
+  }
+
   return (
-    <div className="max-w-lg mx-auto">
-      {/* Pull to refresh hint */}
-      <button
-        onClick={refresh}
-        className="w-full py-3 flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-eidola-orange transition-colors"
+    <div
+      className="max-w-lg mx-auto overflow-y-auto"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull to refresh indicator */}
+      <div
+        className="flex items-center justify-center overflow-hidden transition-all duration-200"
+        style={{ height: pullDistance > 0 ? pullDistance : 0 }}
       >
-        <RefreshCw className="w-4 h-4" />
-        Refresh
-      </button>
+        <div
+          className={`flex items-center gap-2 text-sm text-gray-500 ${
+            isRefreshing ? 'animate-pulse' : ''
+          }`}
+          style={{
+            transform: `rotate(${Math.min(pullDistance * 3, 360)}deg)`,
+            opacity: Math.min(pullDistance / 60, 1),
+          }}
+        >
+          <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </div>
+      </div>
+
+      {/* Refresh indicator when refreshing */}
+      {isRefreshing && (
+        <div className="py-3 flex items-center justify-center gap-2 text-sm text-eidola-orange">
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          Refreshing...
+        </div>
+      )}
+
+      {/* Manual refresh button (fallback for non-touch devices) */}
+      {!isRefreshing && (
+        <button
+          onClick={refresh}
+          className="w-full py-3 flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-eidola-orange transition-colors md:flex hidden"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </button>
+      )}
 
       {/* Posts */}
       <div className="divide-y divide-gray-100">
         {posts.map(post => (
-          <PostCard key={post.id} post={post} onLike={handleLike} />
+          <PostCard
+            key={post.id}
+            post={post}
+            onLike={handleLike}
+            onSus={handleSus}
+            onReal={handleReal}
+            onConfess={handleConfess}
+          />
         ))}
       </div>
 

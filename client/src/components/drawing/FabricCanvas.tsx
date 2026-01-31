@@ -27,6 +27,7 @@ export default function FabricCanvas({ imageUrl, onSave, initialData }: FabricCa
   const [brushColor, setBrushColor] = useState('#FF0000')
   const [brushSize, setBrushSize] = useState(8)
   const [isEraser, setIsEraser] = useState(false)
+  const isEraserRef = useRef(false) // Ref for event handlers
   const [showColorPicker, setShowColorPicker] = useState(false)
 
   // Use refs for history to avoid stale closures
@@ -109,8 +110,36 @@ export default function FabricCanvas({ imageUrl, onSave, initialData }: FabricCa
       saveToHistory()
     })
 
-    // Handle path creation for history
-    canvas.on('path:created', () => {
+    // Handle path creation for history and eraser mode
+    canvas.on('path:created', (e) => {
+      // If in eraser mode, remove paths that intersect with the eraser stroke
+      if (isEraserRef.current && e.path) {
+        const eraserPath = e.path
+        const eraserBounds = eraserPath.getBoundingRect()
+        
+        // Find all paths that intersect with eraser bounds
+        const objectsToRemove: FabricObject[] = []
+        canvas.getObjects().forEach((obj) => {
+          if (obj === eraserPath) return // Skip the eraser path itself
+          const objBounds = obj.getBoundingRect()
+          // Check if bounding boxes intersect
+          if (
+            eraserBounds.left < objBounds.left + objBounds.width &&
+            eraserBounds.left + eraserBounds.width > objBounds.left &&
+            eraserBounds.top < objBounds.top + objBounds.height &&
+            eraserBounds.top + eraserBounds.height > objBounds.top
+          ) {
+            objectsToRemove.push(obj)
+          }
+        })
+        
+        // Remove intersecting objects
+        objectsToRemove.forEach((obj) => canvas.remove(obj))
+        
+        // Remove the eraser path itself (we don't want to see it)
+        canvas.remove(eraserPath)
+        canvas.renderAll()
+      }
       saveToHistory()
     })
 
@@ -119,13 +148,15 @@ export default function FabricCanvas({ imageUrl, onSave, initialData }: FabricCa
     }
   }, [imageUrl, saveToHistory])
 
-  // Update brush settings
+  // Update brush settings and eraser ref
   useEffect(() => {
+    isEraserRef.current = isEraser
     if (!fabricRef.current) return
     const brush = fabricRef.current.freeDrawingBrush as PencilBrush
     if (brush) {
       brush.width = brushSize
-      brush.color = isEraser ? '#FFFFFF' : brushColor
+      // In eraser mode, use semi-transparent red to show what will be erased
+      brush.color = isEraser ? 'rgba(255, 100, 100, 0.5)' : brushColor
     }
   }, [brushColor, brushSize, isEraser])
 

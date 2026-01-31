@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useGeolocation } from '../hooks/useGeolocation'
+import { useAsyncData } from '../hooks/useAsyncData'
+import { useDebouncedCoords } from '../hooks/useDebounce'
 import { get } from '../utils/api'
 import MapView from '../components/map/MapView'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -22,37 +24,29 @@ interface MapPost {
 
 export default function ExplorePage() {
   const [view, setView] = useState<'map' | 'list'>('map')
-  const [posts, setPosts] = useState<MapPost[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const { lat, lng, requestPermission } = useGeolocation()
+
+  // Debounce coordinates to reduce API calls during rapid location updates
+  const { lat: debouncedLat, lng: debouncedLng } = useDebouncedCoords(lat, lng, 300)
 
   useEffect(() => {
     requestPermission()
   }, [requestPermission])
 
-  useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        setIsLoading(true)
-        const params: Record<string, number> = {}
-        if (lat && lng) {
-          params.lat = lat
-          params.lng = lng
-        }
-        const data = await get<MapPost[]>('/feed/map', params)
-        setPosts(data)
-      } catch (err) {
-        console.error('Failed to fetch map posts:', err)
-      } finally {
-        setIsLoading(false)
+  const { data: posts, isLoading } = useAsyncData({
+    fetcher: async () => {
+      const params: Record<string, number> = {}
+      if (debouncedLat && debouncedLng) {
+        params.lat = debouncedLat
+        params.lng = debouncedLng
       }
-    }
-
-    fetchPosts()
-  }, [lat, lng])
+      return get<MapPost[]>('/feed/map', params)
+    },
+    deps: [debouncedLat, debouncedLng],
+  })
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
+    <div className="h-[calc(100vh-8rem-4rem)]">
       {/* View toggle */}
       <div className="flex items-center justify-between px-4 py-2 bg-white border-b">
         <h1 className="text-lg font-semibold">Explore</h1>
@@ -80,13 +74,13 @@ export default function ExplorePage() {
         <LoadingSpinner className="h-full" />
       ) : view === 'map' ? (
         <MapView
-          posts={posts}
+          posts={posts || []}
           center={lat && lng ? [lat, lng] : undefined}
           zoom={lat && lng ? 13 : 3}
         />
       ) : (
         <div className="overflow-y-auto h-full">
-          {posts.length === 0 ? (
+          {!posts || posts.length === 0 ? (
             <EmptyState
               icon={<MapPin className="w-12 h-12" />}
               title="No discoveries nearby"

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { clerkClient } from '@clerk/express'
 import { requireAuth, optionalAuth } from '../middleware/auth.js'
 import { query, getOne, getMany } from '../services/db.js'
+import { createNotification } from './notifications.js'
 
 // Admin emails from environment variable (comma-separated)
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
@@ -49,14 +50,14 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
-    // Get counts
+    // Get counts (exclude expired posts from count)
     const stats = await getOne<{
       posts_count: string
       followers_count: string
       following_count: string
     }>(
       `SELECT
-        (SELECT COUNT(*) FROM eidola.posts WHERE user_id = $1) as posts_count,
+        (SELECT COUNT(*) FROM eidola.posts WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())) as posts_count,
         (SELECT COUNT(*) FROM eidola.follows WHERE following_id = $1) as followers_count,
         (SELECT COUNT(*) FROM eidola.follows WHERE follower_id = $1) as following_count`,
       [req.userId]
@@ -139,14 +140,14 @@ router.get('/:username', optionalAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'User not found' })
     }
 
-    // Get counts
+    // Get counts (exclude expired posts from count)
     const stats = await getOne<{
       posts_count: string
       followers_count: string
       following_count: string
     }>(
       `SELECT
-        (SELECT COUNT(*) FROM eidola.posts WHERE user_id = $1) as posts_count,
+        (SELECT COUNT(*) FROM eidola.posts WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())) as posts_count,
         (SELECT COUNT(*) FROM eidola.follows WHERE following_id = $1) as followers_count,
         (SELECT COUNT(*) FROM eidola.follows WHERE follower_id = $1) as following_count`,
       [user.id]
@@ -189,10 +190,19 @@ router.get('/:username/posts', optionalAuth, async (req: Request, res: Response)
     const limit = parseInt(req.query.limit as string) || 20
     const offset = (page - 1) * limit
 
-    // Get user ID
-    const user = await getOne<{ id: number }>('SELECT id FROM eidola.users WHERE username = $1', [username])
+    // Get user ID and test user status
+    const user = await getOne<{ id: number; is_test_user: boolean }>(
+      'SELECT id, COALESCE(is_test_user, false) as is_test_user FROM eidola.users WHERE username = $1',
+      [username]
+    )
     if (!user) {
       return res.status(404).json({ error: 'User not found' })
+    }
+
+    // If viewing a test user's posts and not the owner, return empty
+    const isOwnProfile = req.userId === user.id
+    if (user.is_test_user && !isOwnProfile) {
+      return res.json({ posts: [], page, hasMore: false })
     }
 
     const posts = await getMany<{
@@ -260,6 +270,15 @@ router.post('/:username/follow', requireAuth, async (req: Request, res: Response
     } else {
       // Follow
       await query('INSERT INTO eidola.follows (follower_id, following_id) VALUES ($1, $2)', [req.userId, userToFollow.id])
+
+      // Notify the user being followed
+      createNotification({
+        userId: userToFollow.id,
+        type: 'follow',
+        actorId: req.userId,
+        message: 'started following you',
+      })
+
       res.json({ following: true })
     }
   } catch (error) {

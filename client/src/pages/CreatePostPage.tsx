@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import { createPost } from '../hooks/usePosts'
 import { useTags } from '../hooks/usePosts'
+import { useAsyncData } from '../hooks/useAsyncData'
+import { useFormSubmit } from '../hooks/useFormSubmit'
 import { get, post as apiPost } from '../utils/api'
 import FabricCanvas from '../components/drawing/FabricCanvas'
 import ImagePositioner, { type ImageTransform } from '../components/drawing/ImagePositioner'
@@ -17,6 +19,7 @@ import {
   Trophy,
   AlertTriangle,
   X,
+  ChevronLeft,
   ChevronRight,
   Loader2,
   Link2
@@ -163,8 +166,16 @@ export default function CreatePostPage() {
 
   // Chain join mode
   const joinChainId = searchParams.get('joinChain')
-  const [parentPost, setParentPost] = useState<Post | null>(null)
-  const [isLoadingParent, setIsLoadingParent] = useState(false)
+
+  // Fetch parent post when joining a chain
+  const { data: parentPost, isLoading: isLoadingParent, error: parentError } = useAsyncData({
+    fetcher: async () => {
+      const token = await getToken()
+      return get<Post>(`/posts/${joinChainId}`, undefined, token)
+    },
+    deps: [joinChainId],
+    enabled: !!joinChainId,
+  })
 
   // Form state
   const [step, setStep] = useState<Step>('upload')
@@ -185,35 +196,14 @@ export default function CreatePostPage() {
   const [expirationHours, setExpirationHours] = useState(24)
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [address, setAddress] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Fetch parent post when joining a chain
-  useEffect(() => {
-    if (!joinChainId) return
-
-    const fetchParentPost = async () => {
-      try {
-        setIsLoadingParent(true)
-        const token = await getToken()
-        const post = await get<Post>(`/posts/${joinChainId}`, undefined, token)
-        setParentPost(post)
-      } catch (err) {
-        console.error('Failed to fetch parent post:', err)
-        setError('Failed to load chain. The post may not exist.')
-      } finally {
-        setIsLoadingParent(false)
-      }
-    }
-
-    fetchParentPost()
-  }, [joinChainId, getToken])
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showExitDialog, setShowExitDialog] = useState(false)
 
   // Handle file selection - Bug 6: Clear error when selecting new file
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      setError(null) // Clear any previous error
+      setSubmitError(null) // Clear any previous error
       setImageFile(file)
       const url = URL.createObjectURL(file)
       setImageUrl(url)
@@ -275,15 +265,11 @@ export default function CreatePostPage() {
   }
 
   // Handle form submission
-  const handleSubmit = async () => {
-    if (!imageFile || !imageUrl) {
-      setError('Please select an image')
-      return
-    }
-
-    try {
-      setIsSubmitting(true)
-      setError(null)
+  const { submit: handleSubmit, isSubmitting, error: formError } = useFormSubmit({
+    onSubmit: async () => {
+      if (!imageFile || !imageUrl) {
+        throw new Error('Please select an image')
+      }
 
       // Upload the transformed image if available, otherwise original
       const fileToUpload = transformedBlob
@@ -301,9 +287,7 @@ export default function CreatePostPage() {
           userDrawing: drawingData || undefined,
         }, token)
 
-        // Navigate to the parent post to see the chain
-        navigate(`/post/${joinChainId}`)
-        return
+        return { redirectTo: `/post/${joinChainId}` }
       }
 
       // Calculate expiration if temporary
@@ -331,13 +315,82 @@ export default function CreatePostPage() {
         tags: selectedTags,
       }, token)
 
-      navigate(`/post/${result.id}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create post')
-    } finally {
-      setIsSubmitting(false)
+      return { redirectTo: `/post/${result.id}` }
+    },
+    onSuccess: (result) => {
+      if (result?.redirectTo) {
+        navigate(result.redirectTo)
+      }
+    },
+  })
+
+  // Combine errors for display
+  const error = formError || submitError || parentError
+
+  // Check if there's any work to save
+  const hasUnsavedWork = imageUrl || caption || title || drawingData
+
+  // Handle exit with confirmation
+  const handleExit = () => {
+    if (hasUnsavedWork && step !== 'upload') {
+      setShowExitDialog(true)
+    } else {
+      navigate(-1)
     }
   }
+
+  // Save draft to localStorage
+  const saveDraft = () => {
+    const draft = {
+      imageUrl,
+      caption,
+      title,
+      selectedTags,
+      postType,
+      isNsfw,
+      savedAt: Date.now(),
+    }
+    localStorage.setItem('eidola_draft', JSON.stringify(draft))
+    navigate('/feed')
+  }
+
+  // Discard and exit
+  const discardAndExit = () => {
+    setShowExitDialog(false)
+    navigate(-1)
+  }
+
+  // Exit confirmation dialog
+  const ExitDialog = () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowExitDialog(false)}>
+      <div className="bg-white rounded-2xl mx-6 w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="p-6 text-center">
+          <h3 className="text-lg font-semibold mb-2">Discard post?</h3>
+          <p className="text-gray-500 text-sm">If you go back now, you will lose any changes you've made.</p>
+        </div>
+        <div className="border-t">
+          <button
+            onClick={discardAndExit}
+            className="w-full py-4 text-red-500 font-medium border-b"
+          >
+            Discard
+          </button>
+          <button
+            onClick={saveDraft}
+            className="w-full py-4 font-medium border-b"
+          >
+            Save Draft
+          </button>
+          <button
+            onClick={() => setShowExitDialog(false)}
+            className="w-full py-4 text-gray-500"
+          >
+            Continue editing
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   // Render based on current step
   const renderStep = () => {
@@ -354,10 +407,10 @@ export default function CreatePostPage() {
         }
 
         return (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white px-4">
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-4" style={{ height: '100dvh' }}>
             {/* Close button to exit create flow */}
             <button
-              onClick={() => navigate(-1)}
+              onClick={handleExit}
               className="absolute top-4 left-4 p-2 hover:bg-gray-100 rounded-full"
             >
               <X className="w-6 h-6" />
@@ -415,9 +468,10 @@ export default function CreatePostPage() {
 
       case 'position':
         return (
-          <div className="absolute inset-0 bg-gray-900">
+          <div className="fixed inset-0 z-50 bg-gray-900" style={{ height: '100dvh' }}>
             <ImagePositioner
               imageUrl={imageUrl!}
+              onExit={handleExit}
               onDone={async (transform) => {
                 // Generate transformed image for FabricCanvas and upload
                 if (transform.containerWidth && transform.containerHeight) {
@@ -456,11 +510,16 @@ export default function CreatePostPage() {
 
       case 'draw':
         return (
-          <div className="absolute inset-0 flex flex-col bg-gray-900">
-            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-white border-b">
-              <button onClick={() => setStep('position')}>
-                <X className="w-6 h-6" />
-              </button>
+          <div className="fixed inset-0 z-50 flex flex-col bg-gray-900" style={{ height: '100dvh' }}>
+            <div className="flex-shrink-0 flex items-center justify-between px-4 pt-4 pb-3 bg-white border-b">
+              <div className="flex items-center gap-2">
+                <button onClick={handleExit} className="p-1">
+                  <X className="w-6 h-6" />
+                </button>
+                <button onClick={() => setStep('position')} className="p-1">
+                  <ChevronLeft className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
               <h2 className="font-semibold">Draw what you see</h2>
               <button
                 onClick={() => setStep('details')}
@@ -487,11 +546,16 @@ export default function CreatePostPage() {
         // Simplified UI for chain join mode
         if (joinChainId && parentPost) {
           return (
-            <div className="absolute inset-0 px-4 py-4 pb-8 overflow-y-auto bg-white">
+            <div className="fixed inset-0 z-50 px-4 pt-4 pb-8 overflow-y-auto bg-white" style={{ height: '100dvh' }}>
               <div className="flex items-center justify-between mb-6">
-                <button onClick={() => setStep('draw')}>
-                  <X className="w-6 h-6" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleExit} className="p-1">
+                    <X className="w-6 h-6" />
+                  </button>
+                  <button onClick={() => setStep('draw')} className="p-1">
+                    <ChevronLeft className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
                 <h2 className="font-semibold">Join Chain</h2>
                 <button
                   onClick={handleSubmit}
@@ -537,11 +601,16 @@ export default function CreatePostPage() {
 
         // Regular post creation UI
         return (
-          <div className="absolute inset-0 px-4 py-4 pb-8 overflow-y-auto bg-white">
+          <div className="fixed inset-0 z-50 px-4 pt-4 pb-8 overflow-y-auto bg-white" style={{ height: '100dvh' }}>
             <div className="flex items-center justify-between mb-6">
-              <button onClick={() => setStep('draw')}>
-                <X className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={handleExit} className="p-1">
+                  <X className="w-6 h-6" />
+                </button>
+                <button onClick={() => setStep('draw')} className="p-1">
+                  <ChevronLeft className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
               <h2 className="font-semibold">Post Details</h2>
               <button
                 onClick={handleSubmit}
@@ -574,8 +643,9 @@ export default function CreatePostPage() {
                 value={caption}
                 onChange={e => setCaption(e.target.value)}
                 placeholder="I see a face in this cloud..."
-                className="w-full px-4 py-3 bg-gray-100 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-eidola-orange/50 disabled:opacity-50 disabled:cursor-not-allowed"
                 rows={3}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -589,7 +659,8 @@ export default function CreatePostPage() {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Give your discovery a name"
-                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-eidola-orange/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -716,6 +787,7 @@ export default function CreatePostPage() {
                 tags={availableTags}
                 selected={selectedTags}
                 onChange={setSelectedTags}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -740,7 +812,7 @@ export default function CreatePostPage() {
 
       case 'location':
         return (
-          <div className="absolute inset-0 bg-white">
+          <div className="fixed inset-0 z-50 bg-white" style={{ height: '100dvh' }}>
             <LocationPicker
               onSelect={(loc, addr) => {
                 setLocation(loc)
@@ -756,5 +828,10 @@ export default function CreatePostPage() {
     }
   }
 
-  return <div className="flex-1 bg-white overflow-hidden relative">{renderStep()}</div>
+  return (
+    <div className="flex-1 bg-white overflow-hidden relative">
+      {renderStep()}
+      {showExitDialog && <ExitDialog />}
+    </div>
+  )
 }

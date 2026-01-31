@@ -14,7 +14,8 @@ router.get('/', optionalAuth, async (req: Request, res: Response) => {
     const difficulty = req.query.difficulty as string | undefined
     const type = req.query.type as string | undefined
 
-    let whereClause = 'WHERE p.is_challenge = true AND (p.expires_at IS NULL OR p.expires_at > NOW())'
+    // Exclude challenges from test users
+    let whereClause = 'WHERE p.is_challenge = true AND (p.expires_at IS NULL OR p.expires_at > NOW()) AND COALESCE(u.is_test_user, false) = false'
     const params: unknown[] = []
     let paramIndex = 1
 
@@ -95,6 +96,7 @@ router.get('/:id/leaderboard', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Challenge not found' })
     }
 
+    // Exclude submissions from test users
     const submissions = await getMany<{
       id: number
       user_id: number
@@ -110,6 +112,7 @@ router.get('/:id/leaderboard', async (req: Request, res: Response) => {
        FROM eidola.challenge_submissions cs
        JOIN eidola.users u ON cs.user_id = u.id
        WHERE cs.challenge_id = $1
+         AND COALESCE(u.is_test_user, false) = false
        ORDER BY cs.similarity_score DESC, cs.created_at ASC
        LIMIT 100`,
       [challengeId]

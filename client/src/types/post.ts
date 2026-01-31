@@ -47,6 +47,9 @@ export interface Post {
   commentsCount: number
   checkinsCount: number
   submissionsCount: number
+  susCount: number
+  realCount: number
+  isBusted: boolean
 
   // Timestamps
   expiresAt?: string
@@ -61,6 +64,8 @@ export interface Post {
   }
   tags?: string[]
   isLiked?: boolean
+  isSus?: boolean
+  isReal?: boolean
   isOwner?: boolean
   timeRemaining?: string
 }

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { SignedIn, SignedOut, UserButton, useAuth } from '@clerk/clerk-react'
-import { Search, Bell, Shield } from 'lucide-react'
+import { Search, Shield } from 'lucide-react'
 import { get } from '../../utils/api'
+import NotificationDropdown from '../notifications/NotificationDropdown'
 
 const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -55,9 +56,9 @@ export default function Header() {
               <Shield className="w-5 h-5 text-eidola-orange" />
             </Link>
           )}
-          <button className="p-2 hover:bg-gray-100 rounded-full">
-            <Bell className="w-5 h-5 text-gray-600" />
-          </button>
+          <SignedIn>
+            <NotificationDropdown />
+          </SignedIn>
 
           {hasClerk ? (
             <>

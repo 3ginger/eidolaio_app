@@ -34,16 +34,17 @@ export function getTimeRemainingVerbose(expiresAt: Date): string {
   return `${minutes}m left`
 }
 
-export function formatRelativeDate(date: Date): string {
+export function formatRelativeDate(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date
   const now = new Date()
-  const diff = now.getTime() - date.getTime()
+  const diff = now.getTime() - dateObj.getTime()
   const seconds = Math.floor(diff / 1000)
   const minutes = Math.floor(seconds / 60)
   const hours = Math.floor(minutes / 60)
   const days = Math.floor(hours / 24)
 
   if (days > 7) {
-    return date.toLocaleDateString()
+    return dateObj.toLocaleDateString()
   }
   if (days > 0) {
     return `${days}d ago`

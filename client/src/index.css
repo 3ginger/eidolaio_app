@@ -96,3 +96,28 @@ body {
 .animate-carousel:hover {
   animation-play-state: paused;
 }
+
+/* Toast notification animation */
+@keyframes toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-toast-slide-up {
+  animation: toast-slide-up 0.3s ease-out;
+}
+
+/* Safe area insets for mobile devices */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

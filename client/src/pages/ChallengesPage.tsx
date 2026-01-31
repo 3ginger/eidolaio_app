@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { get } from '../utils/api'
+import { useAsyncData } from '../hooks/useAsyncData'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
 import TabGroup from '../components/ui/TabGroup'
@@ -30,26 +31,17 @@ const difficultyColors = {
 }
 
 export default function ChallengesPage() {
-  const [challenges, setChallenges] = useState<Challenge[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'draw' | 'text'>('all')
 
-  useEffect(() => {
-    const fetchChallenges = async () => {
-      try {
-        setIsLoading(true)
-        const params = filter !== 'all' ? { type: filter } : {}
-        const data = await get<{ challenges: Challenge[] }>('/challenges', params)
-        setChallenges(data.challenges)
-      } catch (err) {
-        console.error('Failed to fetch challenges:', err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const { data, isLoading } = useAsyncData({
+    fetcher: async () => {
+      const params = filter !== 'all' ? { type: filter } : {}
+      return get<{ challenges: Challenge[] }>('/challenges', params)
+    },
+    deps: [filter],
+  })
 
-    fetchChallenges()
-  }, [filter])
+  const challenges = data?.challenges ?? []
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-4">
@@ -71,6 +63,7 @@ export default function ChallengesPage() {
           ]}
           value={filter}
           onChange={setFilter}
+          variant="underline"
         />
       </div>
 

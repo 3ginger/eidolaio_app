@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ClerkProvider } from '@clerk/clerk-react'
+import { ToastProvider } from './contexts/ToastContext'
 import App from './App'
 import './index.css'
 
@@ -12,12 +13,14 @@ if (!clerkPubKey) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {clerkPubKey ? (
-      <ClerkProvider publishableKey={clerkPubKey}>
+    <ToastProvider>
+      {clerkPubKey ? (
+        <ClerkProvider publishableKey={clerkPubKey}>
+          <App />
+        </ClerkProvider>
+      ) : (
         <App />
-      </ClerkProvider>
-    ) : (
-      <App />
-    )}
+      )}
+    </ToastProvider>
   </React.StrictMode>,
 )

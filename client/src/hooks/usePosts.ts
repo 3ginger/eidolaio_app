@@ -124,6 +124,18 @@ export async function reportPost(
   return post(`/posts/${postId}/report`, { reason, description }, token)
 }
 
+export async function susPost(postId: number, token?: string | null): Promise<{ sus: boolean; removedReal?: boolean; pointsEarned?: number }> {
+  return post(`/posts/${postId}/sus`, undefined, token)
+}
+
+export async function realPost(postId: number, token?: string | null): Promise<{ real: boolean; removedSus?: boolean; pointsEarned?: number }> {
+  return post(`/posts/${postId}/real`, undefined, token)
+}
+
+export async function confessPost(postId: number, token?: string | null): Promise<{ busted: boolean; pointsEarned?: number }> {
+  return post(`/posts/${postId}/confess`, undefined, token)
+}
+
 export async function createPost(data: {
   type: 'persistent' | 'temporary' | 'challenge'
   imageUrl: string

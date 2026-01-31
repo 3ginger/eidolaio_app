@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useAuth } from '@clerk/clerk-react'
 import { useUser, useProfile } from '../hooks/useUser'
 import { get, post } from '../utils/api'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -19,6 +20,7 @@ interface ProfilePost {
 }
 
 export default function ProfilePage() {
+  const { getToken } = useAuth()
   const { username } = useParams<{ username?: string }>()
   const { user: currentUser, isLoading: currentUserLoading } = useUser()
   const { profile, isLoading: profileLoading } = useProfile(username)
@@ -45,7 +47,8 @@ export default function ProfilePage() {
     const fetchPosts = async () => {
       try {
         setPostsLoading(true)
-        const data = await get<{ posts: ProfilePost[] }>(`/user/${user.username}/posts`)
+        const token = await getToken()
+        const data = await get<{ posts: ProfilePost[] }>(`/user/${user.username}/posts`, undefined, token)
         setPosts(data.posts)
       } catch (err) {
         console.error('Failed to fetch posts:', err)
@@ -55,11 +58,12 @@ export default function ProfilePage() {
     }
 
     fetchPosts()
-  }, [user])
+  }, [user, getToken])
 
   const handleFollow = async () => {
     if (!user) return
-    const result = await post<{ following: boolean }>(`/user/${user.username}/follow`)
+    const token = await getToken()
+    const result = await post<{ following: boolean }>(`/user/${user.username}/follow`, undefined, token)
     setIsFollowing(result.following)
   }
 

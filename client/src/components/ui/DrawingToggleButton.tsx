@@ -1,5 +1,5 @@
 import { MouseEvent } from 'react'
-import { Pencil, Image } from 'lucide-react'
+import { Layers, Image } from 'lucide-react'
 
 interface DrawingToggleButtonProps {
   showDrawing: boolean
@@ -21,7 +21,7 @@ export default function DrawingToggleButton({
       {showDrawing ? (
         <Image className="w-5 h-5 text-white" />
       ) : (
-        <Pencil className="w-5 h-5 text-white" />
+        <Layers className="w-5 h-5 text-white" />
       )}
     </button>
   )

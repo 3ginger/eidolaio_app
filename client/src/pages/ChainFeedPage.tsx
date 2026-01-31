@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import { get } from '../utils/api'
+import { useAsyncData } from '../hooks/useAsyncData'
 import type { Post, PhotoChainEntry } from '../types/post'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
 import Avatar from '../components/ui/Avatar'
+import PageHeader from '../components/ui/PageHeader'
 import DrawingToggleButton from '../components/ui/DrawingToggleButton'
 import { getPositionBadge, getPositionBadgeColor } from '../utils/badges'
 import { formatRelativeDate } from '../utils/dateTime'
 import { extractDrawingDataUrl } from '../utils/drawing'
-import { ArrowLeft, MapPin, Link2 } from 'lucide-react'
+import { MapPin, Link2 } from 'lucide-react'
 
 interface ChainEntry extends PhotoChainEntry {
   userDrawing?: object
@@ -19,37 +21,23 @@ interface ChainEntry extends PhotoChainEntry {
 export default function ChainFeedPage() {
   const { postId } = useParams<{ postId: string }>()
   const { getToken } = useAuth()
-  const [originalPost, setOriginalPost] = useState<Post | null>(null)
-  const [entries, setEntries] = useState<ChainEntry[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!postId) return
+  const { data, isLoading, error } = useAsyncData({
+    fetcher: async () => {
+      if (!postId) throw new Error('Post ID required')
+      const token = await getToken()
+      const [post, chainData] = await Promise.all([
+        get<Post>(`/posts/${postId}`, undefined, token),
+        get<{ entries: ChainEntry[] }>(`/chain/${postId}`, undefined, token),
+      ])
+      return { originalPost: post, entries: chainData.entries }
+    },
+    deps: [postId],
+    enabled: !!postId,
+  })
 
-    const fetchChainData = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
-        const token = await getToken()
-
-        // Fetch original post
-        const post = await get<Post>(`/posts/${postId}`, undefined, token)
-        setOriginalPost(post)
-
-        // Fetch chain entries
-        const chainData = await get<{ entries: ChainEntry[] }>(`/chain/${postId}`, undefined, token)
-        setEntries(chainData.entries)
-      } catch (err) {
-        console.error('Failed to fetch chain:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load chain')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchChainData()
-  }, [postId, getToken])
+  const originalPost = data?.originalPost ?? null
+  const entries = data?.entries ?? []
 
   if (isLoading) {
     return <LoadingSpinner fullHeight color="teal" />
@@ -68,16 +56,12 @@ export default function ChainFeedPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="sticky top-0 bg-white z-10 px-4 py-3 border-b flex items-center gap-3">
-        <Link to={`/post/${postId}`} className="p-1 -ml-1 hover:bg-gray-100 rounded-full">
-          <ArrowLeft className="w-6 h-6" />
-        </Link>
-        <div>
-          <h1 className="font-semibold">Photo Chain</h1>
-          <p className="text-sm text-gray-500">{entries.length} visitors</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Photo Chain"
+        backTo={`/post/${postId}`}
+        subtitle={`${entries.length} visitors`}
+        sticky
+      />
 
       {/* Original post (anchor) */}
       <div className="bg-white border-b">

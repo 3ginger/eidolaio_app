@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express'
 import { requireAuth, optionalAuth } from '../middleware/auth.js'
 import { query, getOne, getMany, transaction } from '../services/db.js'
 import { moderateImage } from '../services/moderation.js'
+import { createNotification } from './notifications.js'
+import { POINTS, calculateConfessionPoints } from '../config/points.js'
 
 const router = Router()
 
@@ -29,6 +31,9 @@ interface PostRow {
   comments_count: number
   checkins_count: number
   submissions_count: number
+  sus_count: number
+  real_count: number
+  is_busted: boolean
   expires_at: string | null
   created_at: string
   updated_at: string
@@ -36,6 +41,8 @@ interface PostRow {
   display_name: string | null
   avatar_url: string | null
   is_liked: boolean
+  is_sus: boolean
+  is_real: boolean
 }
 
 // Get all posts (with pagination)
@@ -56,13 +63,16 @@ router.get('/', optionalAuth, async (req: Request, res: Response) => {
       params.push(type)
     }
 
-    // Exclude expired temporary posts
+    // Exclude expired temporary posts and test user posts
     whereClause += ` AND (p.expires_at IS NULL OR p.expires_at > NOW())`
+    whereClause += ` AND COALESCE(u.is_test_user, false) = false`
 
     const posts = await getMany<PostRow>(
       `SELECT p.*,
               u.username, u.display_name, u.avatar_url,
-              ${req.userId ? `EXISTS(SELECT 1 FROM eidola.likes WHERE post_id = p.id AND user_id = $${paramIndex++}) as is_liked` : 'false as is_liked'}
+              ${req.userId ? `EXISTS(SELECT 1 FROM eidola.likes WHERE post_id = p.id AND user_id = $${paramIndex}) as is_liked` : 'false as is_liked'},
+              ${req.userId ? `EXISTS(SELECT 1 FROM eidola.sus WHERE post_id = p.id AND user_id = $${paramIndex}) as is_sus` : 'false as is_sus'},
+              ${req.userId ? `EXISTS(SELECT 1 FROM eidola.real_votes WHERE post_id = p.id AND user_id = $${paramIndex++}) as is_real` : 'false as is_real'}
        FROM eidola.posts p
        JOIN eidola.users u ON p.user_id = u.id
        ${whereClause}
@@ -87,10 +97,13 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
   try {
     const postId = parseInt(req.params.id as string)
 
-    const post = await getOne<PostRow & { is_owner: boolean }>(
+    const post = await getOne<PostRow & { is_owner: boolean; poster_is_test_user: boolean }>(
       `SELECT p.*,
               u.username, u.display_name, u.avatar_url,
+              COALESCE(u.is_test_user, false) as poster_is_test_user,
               ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.likes WHERE post_id = p.id AND user_id = $2) as is_liked' : 'false as is_liked'},
+              ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.sus WHERE post_id = p.id AND user_id = $2) as is_sus' : 'false as is_sus'},
+              ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.real_votes WHERE post_id = p.id AND user_id = $2) as is_real' : 'false as is_real'},
               ${req.userId ? 'p.user_id = $2 as is_owner' : 'false as is_owner'}
        FROM eidola.posts p
        JOIN eidola.users u ON p.user_id = u.id
@@ -99,6 +112,11 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
     )
 
     if (!post) {
+      return res.status(404).json({ error: 'Post not found' })
+    }
+
+    // Hide test user posts from non-owners
+    if (post.poster_is_test_user && !post.is_owner) {
       return res.status(404).json({ error: 'Post not found' })
     }
 
@@ -250,6 +268,19 @@ router.post('/:id/like', requireAuth, async (req: Request, res: Response) => {
       // Like
       await query('INSERT INTO eidola.likes (post_id, user_id) VALUES ($1, $2)', [postId, req.userId])
       await query('UPDATE eidola.posts SET likes_count = likes_count + 1 WHERE id = $1', [postId])
+
+      // Notify post owner
+      const post = await getOne<{ user_id: number }>('SELECT user_id FROM eidola.posts WHERE id = $1', [postId])
+      if (post && post.user_id !== req.userId) {
+        createNotification({
+          userId: post.user_id,
+          type: 'like',
+          actorId: req.userId,
+          postId,
+          message: 'liked your post',
+        })
+      }
+
       res.json({ liked: true })
     }
   } catch (error) {
@@ -258,11 +289,215 @@ router.post('/:id/like', requireAuth, async (req: Request, res: Response) => {
   }
 })
 
+// Sus/unsus post (mark as suspected AI)
+router.post('/:id/sus', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const postId = parseInt(req.params.id as string)
+
+    // Check if already sus'd
+    const existing = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.sus WHERE post_id = $1 AND user_id = $2',
+      [postId, req.userId]
+    )
+
+    // Check if user has voted real (can't vote both)
+    const hasReal = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.real_votes WHERE post_id = $1 AND user_id = $2',
+      [postId, req.userId]
+    )
+
+    // Check if user already earned points for voting on this post
+    const alreadyEarnedPoints = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.vote_points_earned WHERE post_id = $1 AND user_id = $2',
+      [postId, req.userId]
+    )
+
+    if (existing) {
+      // Un-sus (no points change)
+      await query('DELETE FROM eidola.sus WHERE post_id = $1 AND user_id = $2', [postId, req.userId])
+      await query('UPDATE eidola.posts SET sus_count = sus_count - 1 WHERE id = $1', [postId])
+      res.json({ sus: false, pointsEarned: 0 })
+    } else {
+      // If user had voted real, remove that first
+      if (hasReal) {
+        await query('DELETE FROM eidola.real_votes WHERE post_id = $1 AND user_id = $2', [postId, req.userId])
+        await query('UPDATE eidola.posts SET real_count = real_count - 1 WHERE id = $1', [postId])
+      }
+
+      // Sus the post
+      await query('INSERT INTO eidola.sus (post_id, user_id) VALUES ($1, $2)', [postId, req.userId])
+      await query('UPDATE eidola.posts SET sus_count = sus_count + 1 WHERE id = $1', [postId])
+
+      // Award points only if first time voting on this post
+      let pointsEarned = 0
+      if (!alreadyEarnedPoints) {
+        await query('UPDATE eidola.users SET points = points + $1 WHERE id = $2', [POINTS.VOTE, req.userId])
+        await query('INSERT INTO eidola.vote_points_earned (post_id, user_id) VALUES ($1, $2)', [postId, req.userId])
+        pointsEarned = POINTS.VOTE
+      }
+
+      // Notify post owner that someone is suspicious
+      const post = await getOne<{ user_id: number }>('SELECT user_id FROM eidola.posts WHERE id = $1', [postId])
+      if (post && post.user_id !== req.userId) {
+        createNotification({
+          userId: post.user_id,
+          type: 'sus',
+          actorId: req.userId,
+          postId,
+          message: 'thinks your post might be AI 🤖',
+        })
+      }
+
+      res.json({ sus: true, removedReal: !!hasReal, pointsEarned })
+    }
+  } catch (error) {
+    console.error('Error toggling sus:', error)
+    res.status(500).json({ error: 'Failed to toggle sus' })
+  }
+})
+
+// Vote "real" on a post (I believe this is authentic)
+router.post('/:id/real', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const postId = parseInt(req.params.id as string)
+
+    // Check if already voted real
+    const existing = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.real_votes WHERE post_id = $1 AND user_id = $2',
+      [postId, req.userId]
+    )
+
+    // Check if user has sus'd this post (can't vote both)
+    const hasSus = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.sus WHERE post_id = $1 AND user_id = $2',
+      [postId, req.userId]
+    )
+
+    // Check if user already earned points for voting on this post
+    const alreadyEarnedPoints = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.vote_points_earned WHERE post_id = $1 AND user_id = $2',
+      [postId, req.userId]
+    )
+
+    if (existing) {
+      // Remove real vote (no points change)
+      await query('DELETE FROM eidola.real_votes WHERE post_id = $1 AND user_id = $2', [postId, req.userId])
+      await query('UPDATE eidola.posts SET real_count = real_count - 1 WHERE id = $1', [postId])
+      res.json({ real: false, pointsEarned: 0 })
+    } else {
+      // If user had sus'd, remove that first
+      if (hasSus) {
+        await query('DELETE FROM eidola.sus WHERE post_id = $1 AND user_id = $2', [postId, req.userId])
+        await query('UPDATE eidola.posts SET sus_count = sus_count - 1 WHERE id = $1', [postId])
+      }
+
+      // Add real vote
+      await query('INSERT INTO eidola.real_votes (post_id, user_id) VALUES ($1, $2)', [postId, req.userId])
+      await query('UPDATE eidola.posts SET real_count = real_count + 1 WHERE id = $1', [postId])
+
+      // Award points only if first time voting on this post
+      let pointsEarned = 0
+      if (!alreadyEarnedPoints) {
+        await query('UPDATE eidola.users SET points = points + $1 WHERE id = $2', [POINTS.VOTE, req.userId])
+        await query('INSERT INTO eidola.vote_points_earned (post_id, user_id) VALUES ($1, $2)', [postId, req.userId])
+        pointsEarned = POINTS.VOTE
+      }
+
+      res.json({ real: true, removedSus: !!hasSus, pointsEarned })
+    }
+  } catch (error) {
+    console.error('Error toggling real vote:', error)
+    res.status(500).json({ error: 'Failed to toggle real vote' })
+  }
+})
+
+// Get potential confession points (for UI display)
+router.get('/:id/confess-points', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const postId = parseInt(req.params.id as string)
+    
+    const post = await getOne<{ user_id: number; is_busted: boolean; sus_count: number; real_count: number }>(
+      'SELECT user_id, is_busted, sus_count, real_count FROM eidola.posts WHERE id = $1',
+      [postId]
+    )
+
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' })
+    }
+
+    if (post.user_id !== req.userId) {
+      return res.status(403).json({ error: 'Not your post' })
+    }
+
+    if (post.is_busted) {
+      return res.json({ points: 0, alreadyConfessed: true })
+    }
+
+    const points = calculateConfessionPoints(post.real_count, post.sus_count)
+    res.json({ 
+      points, 
+      realCount: post.real_count, 
+      susCount: post.sus_count,
+      isTrusted: post.real_count > post.sus_count
+    })
+  } catch (error) {
+    console.error('Error getting confess points:', error)
+    res.status(500).json({ error: 'Failed to get confess points' })
+  }
+})
+
+// Confess to AI usage (owner only)
+router.post('/:id/confess', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const postId = parseInt(req.params.id as string)
+
+    // Verify ownership
+    const post = await getOne<{ user_id: number; is_busted: boolean }>(
+      'SELECT user_id, is_busted FROM eidola.posts WHERE id = $1',
+      [postId]
+    )
+
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' })
+    }
+
+    if (post.user_id !== req.userId) {
+      return res.status(403).json({ error: 'Only the post owner can confess' })
+    }
+
+    if (post.is_busted) {
+      return res.status(400).json({ error: 'Already confessed' })
+    }
+
+    // Get vote counts to calculate bonus
+    const postData = await getOne<{ sus_count: number; real_count: number }>(
+      'SELECT sus_count, real_count FROM eidola.posts WHERE id = $1',
+      [postId]
+    )
+    
+    const susCount = postData?.sus_count || 0
+    const realCount = postData?.real_count || 0
+    
+    // Calculate points using config
+    const pointsEarned = calculateConfessionPoints(realCount, susCount)
+
+    // Mark as busted + award points
+    await query('UPDATE eidola.posts SET is_busted = true WHERE id = $1', [postId])
+    await query('UPDATE eidola.users SET points = points + $1 WHERE id = $2', [pointsEarned, req.userId])
+
+    res.json({ busted: true, pointsEarned })
+  } catch (error) {
+    console.error('Error confessing:', error)
+    res.status(500).json({ error: 'Failed to confess' })
+  }
+})
+
 // Get comments for a post
 router.get('/:id/comments', async (req: Request, res: Response) => {
   try {
     const postId = parseInt(req.params.id as string)
 
+    // Exclude comments from test users
     const comments = await getMany<{
       id: number
       content: string
@@ -276,6 +511,7 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
        FROM eidola.comments c
        JOIN eidola.users u ON c.user_id = u.id
        WHERE c.post_id = $1
+         AND COALESCE(u.is_test_user, false) = false
        ORDER BY c.created_at ASC`,
       [postId]
     )
@@ -313,6 +549,18 @@ router.post('/:id/comments', requireAuth, async (req: Request, res: Response) =>
 
     // Update comment count
     await query('UPDATE eidola.posts SET comments_count = comments_count + 1 WHERE id = $1', [postId])
+
+    // Notify post owner
+    const post = await getOne<{ user_id: number }>('SELECT user_id FROM eidola.posts WHERE id = $1', [postId])
+    if (post && post.user_id !== req.userId) {
+      createNotification({
+        userId: post.user_id,
+        type: 'comment',
+        actorId: req.userId,
+        postId,
+        message: 'commented on your post',
+      })
+    }
 
     res.status(201).json({ id: result.rows[0].id })
   } catch (error) {
@@ -410,6 +658,9 @@ function formatPost(post: PostRow) {
     commentsCount: post.comments_count,
     checkinsCount: post.checkins_count,
     submissionsCount: post.submissions_count,
+    susCount: post.sus_count,
+    realCount: post.real_count,
+    isBusted: post.is_busted,
     expiresAt: post.expires_at,
     createdAt: post.created_at,
     updatedAt: post.updated_at,
@@ -418,7 +669,9 @@ function formatPost(post: PostRow) {
       displayName: post.display_name,
       avatarUrl: post.avatar_url
     },
-    isLiked: post.is_liked
+    isLiked: post.is_liked,
+    isSus: post.is_sus,
+    isReal: post.is_real
   }
 }
 
