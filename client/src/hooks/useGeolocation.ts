@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { Geolocation } from '@capacitor/geolocation'
 
 interface GeolocationState {
   lat: number | null
@@ -22,7 +24,34 @@ export function useGeolocation(autoFetch = false): UseGeolocationReturn {
     isLoading: autoFetch,
   })
 
-  const getPosition = useCallback(() => {
+  // Use Capacitor's native geolocation when available
+  const getPositionNative = useCallback(async () => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }))
+    try {
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      })
+      setState({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        error: null,
+        isLoading: false,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get location'
+      setState(prev => ({
+        ...prev,
+        error: message,
+        isLoading: false,
+      }))
+    }
+  }, [])
+
+  // Use web API for browsers
+  const getPositionWeb = useCallback(() => {
     if (!navigator.geolocation) {
       setState(prev => ({
         ...prev,
@@ -70,6 +99,14 @@ export function useGeolocation(autoFetch = false): UseGeolocationReturn {
       }
     )
   }, [])
+
+  const getPosition = useCallback(() => {
+    if (Capacitor.isNativePlatform()) {
+      getPositionNative()
+    } else {
+      getPositionWeb()
+    }
+  }, [getPositionNative, getPositionWeb])
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
     if (!navigator.permissions) {

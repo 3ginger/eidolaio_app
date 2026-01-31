@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 
 interface UploadProgress {
   percent: number
@@ -77,11 +79,34 @@ export function useUpload(): UseUploadReturn {
   }
 }
 
-// Hook for camera capture
+// Hook for camera capture - uses native Capacitor camera on iOS/Android
 export function useCamera() {
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Check if we're on native platform
+  const isNative = Capacitor.isNativePlatform()
+
+  // Native camera capture using Capacitor
+  const capturePhotoNative = useCallback(async (source: 'camera' | 'photos' = 'camera'): Promise<string> => {
+    try {
+      setError(null)
+      const photo = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
+        correctOrientation: true,
+      })
+      return photo.dataUrl || ''
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Camera access denied'
+      setError(message)
+      throw err
+    }
+  }, [])
+
+  // Web camera - start stream
   const startCamera = useCallback(async () => {
     try {
       setError(null)
@@ -105,6 +130,7 @@ export function useCamera() {
     }
   }, [stream])
 
+  // Web camera - capture from video element
   const capturePhoto = useCallback((videoElement: HTMLVideoElement): string => {
     const canvas = document.createElement('canvas')
     canvas.width = videoElement.videoWidth
@@ -123,6 +149,8 @@ export function useCamera() {
     startCamera,
     stopCamera,
     capturePhoto,
+    capturePhotoNative,
     hasCamera: !!stream,
+    isNative,
   }
 }

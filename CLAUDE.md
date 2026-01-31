@@ -7,6 +7,7 @@ A social platform for sharing pareidolia discoveries — faces and patterns spot
 ```
 pareidolia-app/
 ├── client/          # React frontend (Vite + TypeScript)
+│   └── ios/         # iOS app (Capacitor)
 ├── api/             # Backend API
 ├── api-func/        # Serverless functions
 └── vercel.json      # Root deployment config
@@ -48,9 +49,29 @@ cd api && vercel env pull ../.env.local --environment production
 
 ## Tech Stack
 - Frontend: React, Vite, TypeScript, Tailwind CSS
+- Mobile: Capacitor (iOS)
 - Auth: Clerk
 - Deployment: Vercel
 - File Upload: Uploadthing (UPLOADTHING_TOKEN required, region: sea1)
+
+## iOS App
+
+The iOS app is a Capacitor wrapper around the web app.
+
+### Build Commands
+```bash
+cd client
+npm run ios:sync    # Build web app and sync with iOS
+npm run ios:open    # Open in Xcode
+npm run ios:run     # Build and run on simulator/device
+```
+
+### Configuration
+- **Bundle ID**: `io.eidola.app`
+- **Config**: `client/capacitor.config.ts`
+- **Permissions**: Camera, Photo Library, Location (configured in Info.plist)
+
+See `client/IOS_BUILD.md` for detailed build instructions.
 
 ## API Authentication Pattern
 
