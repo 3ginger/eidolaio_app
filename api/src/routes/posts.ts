@@ -97,14 +97,15 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
   try {
     const postId = parseInt(req.params.id as string)
 
-    const post = await getOne<PostRow & { is_owner: boolean; poster_is_test_user: boolean }>(
+    const post = await getOne<PostRow & { is_owner: boolean; poster_is_test_user: boolean; has_submitted: boolean }>(
       `SELECT p.*,
               u.username, u.display_name, u.avatar_url,
               COALESCE(u.is_test_user, false) as poster_is_test_user,
               ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.likes WHERE post_id = p.id AND user_id = $2) as is_liked' : 'false as is_liked'},
               ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.sus WHERE post_id = p.id AND user_id = $2) as is_sus' : 'false as is_sus'},
               ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.real_votes WHERE post_id = p.id AND user_id = $2) as is_real' : 'false as is_real'},
-              ${req.userId ? 'p.user_id = $2 as is_owner' : 'false as is_owner'}
+              ${req.userId ? 'p.user_id = $2 as is_owner' : 'false as is_owner'},
+              ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.challenge_submissions WHERE challenge_id = p.id AND user_id = $2) as has_submitted' : 'false as has_submitted'}
        FROM eidola.posts p
        JOIN eidola.users u ON p.user_id = u.id
        WHERE p.id = $1`,
@@ -131,7 +132,8 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
     res.json({
       ...formatPost(post),
       tags: tags.map(t => t.name),
-      isOwner: post.is_owner
+      isOwner: post.is_owner,
+      hasSubmitted: post.has_submitted
     })
   } catch (error) {
     console.error('Error fetching post:', error)

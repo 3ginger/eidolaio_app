@@ -9,7 +9,7 @@ export function extractDrawingDataUrl(userDrawing?: object): string | null {
   return null
 }
 
-export function hasValidDrawing(userDrawing?: object, postType?: string): boolean {
+export function hasValidDrawing(userDrawing?: object, _postType?: string): boolean {
   const dataUrl = extractDrawingDataUrl(userDrawing)
-  return !!dataUrl && postType !== 'challenge'
+  return !!dataUrl
 }

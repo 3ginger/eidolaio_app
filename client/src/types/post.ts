@@ -67,6 +67,7 @@ export interface Post {
   isSus?: boolean
   isReal?: boolean
   isOwner?: boolean
+  hasSubmitted?: boolean
   timeRemaining?: string
 }
 
@@ -116,4 +117,36 @@ export interface Report {
   createdAt: string
   resolvedAt?: string
   resolvedBy?: number
+}
+
+export interface ChallengeSubmission {
+  id: number
+  userId: number
+  drawingData: object | null
+  textGuess: string | null
+  similarityScore: number
+  rank: number
+  createdAt: string
+  isOwn: boolean
+  user: {
+    username: string
+    displayName?: string
+    avatarUrl?: string
+  }
+}
+
+export interface ChallengeSubmissionsResponse {
+  challengeId: number
+  challengeType: string
+  imageUrl: string
+  original: {
+    drawingData: object | null
+    caption: string | null
+    user: {
+      username: string
+      avatarUrl?: string
+    }
+  }
+  submissions: ChallengeSubmission[]
+  totalSubmissions: number
 }

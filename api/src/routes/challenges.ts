@@ -256,6 +256,102 @@ router.post('/:id/submit', requireAuth, async (req: Request, res: Response) => {
   }
 })
 
+// Get all submissions for a challenge (only if user has submitted)
+router.get('/:id/submissions', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const challengeId = parseInt(req.params.id as string)
+
+    // Check if user has submitted
+    const userSubmission = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.challenge_submissions WHERE challenge_id = $1 AND user_id = $2',
+      [challengeId, req.userId]
+    )
+
+    if (!userSubmission) {
+      return res.status(403).json({ error: 'Submit your own entry first to see others' })
+    }
+
+    // Get challenge info including original drawing
+    const challenge = await getOne<{
+      is_challenge: boolean
+      challenge_type: string
+      image_url: string
+      user_drawing: object | null
+      user_caption: string | null
+      username: string
+      avatar_url: string | null
+    }>(
+      `SELECT p.is_challenge, p.challenge_type, p.image_url, p.user_drawing, p.user_caption,
+              u.username, u.avatar_url
+       FROM eidola.posts p
+       JOIN eidola.users u ON p.user_id = u.id
+       WHERE p.id = $1`,
+      [challengeId]
+    )
+
+    if (!challenge?.is_challenge) {
+      return res.status(404).json({ error: 'Challenge not found' })
+    }
+
+    // Get all submissions (excluding test users)
+    const submissions = await getMany<{
+      id: number
+      user_id: number
+      drawing_data: object | null
+      text_guess: string | null
+      similarity_score: number
+      rank: number
+      created_at: string
+      username: string
+      display_name: string | null
+      avatar_url: string | null
+    }>(
+      `SELECT cs.id, cs.user_id, cs.drawing_data, cs.text_guess, cs.similarity_score, cs.rank, cs.created_at,
+              u.username, u.display_name, u.avatar_url
+       FROM eidola.challenge_submissions cs
+       JOIN eidola.users u ON cs.user_id = u.id
+       WHERE cs.challenge_id = $1
+         AND COALESCE(u.is_test_user, false) = false
+       ORDER BY cs.rank ASC
+       LIMIT 50`,
+      [challengeId]
+    )
+
+    res.json({
+      challengeId,
+      challengeType: challenge.challenge_type,
+      imageUrl: challenge.image_url,
+      original: {
+        drawingData: challenge.user_drawing,
+        caption: challenge.user_caption,
+        user: {
+          username: challenge.username,
+          avatarUrl: challenge.avatar_url
+        }
+      },
+      submissions: submissions.map(s => ({
+        id: s.id,
+        userId: s.user_id,
+        drawingData: s.drawing_data,
+        textGuess: s.text_guess,
+        similarityScore: s.similarity_score,
+        rank: s.rank,
+        createdAt: s.created_at,
+        isOwn: s.user_id === req.userId,
+        user: {
+          username: s.username,
+          displayName: s.display_name,
+          avatarUrl: s.avatar_url
+        }
+      })),
+      totalSubmissions: submissions.length
+    })
+  } catch (error) {
+    console.error('Error fetching submissions:', error)
+    res.status(500).json({ error: 'Failed to fetch submissions' })
+  }
+})
+
 // Get user's submission for a challenge
 router.get('/:id/my-submission', requireAuth, async (req: Request, res: Response) => {
   try {

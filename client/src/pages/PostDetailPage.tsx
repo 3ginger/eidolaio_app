@@ -9,6 +9,7 @@ import { useToast } from '../contexts/ToastContext'
 import PhotoChain from '../components/post/PhotoChain'
 import NSFWOverlay from '../components/common/NSFWOverlay'
 import ChallengeSubmit from '../components/challenge/ChallengeSubmit'
+import ChallengeChain from '../components/challenge/ChallengeChain'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Avatar from '../components/ui/Avatar'
 import Modal from '../components/ui/Modal'
@@ -275,7 +276,7 @@ export default function PostDetailPage() {
               )}
 
               {/* Drawing toggle button - small icon in corner */}
-              {hasDrawing && post.type !== 'challenge' && (
+              {hasDrawing && (
                 <DrawingToggleButton
                   showDrawing={showDrawing}
                   onToggle={() => setShowDrawing(prev => !prev)}
@@ -486,27 +487,15 @@ export default function PostDetailPage() {
         </div>
       )}
 
-      {/* Challenge section */}
-      {post.isChallenge && (
-        <div className="px-4 py-4 border-b bg-gradient-to-r from-eidola-orange/10 to-eidola-magenta/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold">Challenge</h3>
-              <p className="text-sm text-gray-600">
-                {post.challengeType === 'draw' ? 'Draw what you see' : 'Guess what they see'}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowChallenge(true)}
-              className="btn-gradient px-4 py-2 rounded-full text-white"
-            >
-              Try It
-            </button>
-          </div>
-          <div className="mt-2 text-sm text-gray-500">
-            {post.submissionsCount} submissions
-          </div>
-        </div>
+      {/* Challenge section with submissions chain */}
+      {post.isChallenge && postId && (
+        <ChallengeChain
+          postId={postId}
+          imageUrl={post.imageUrl}
+          hasSubmitted={post.hasSubmitted || false}
+          submissionsCount={post.submissionsCount}
+          onTryChallenge={() => setShowChallenge(true)}
+        />
       )}
 
       {/* Photo Chain (for persistent posts) */}
