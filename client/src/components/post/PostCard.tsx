@@ -131,12 +131,6 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
 
         {/* Post type badge */}
         <div className="flex items-center gap-2">
-          {isBusted && (
-            <span className="flex items-center gap-1 text-xs text-white bg-gradient-to-r from-purple-500 to-pink-500 px-2.5 py-1 rounded-full font-medium">
-              <Bot className="w-3 h-3" />
-              Busted
-            </span>
-          )}
           {post.type === 'temporary' && timeRemaining && (
             <span className="flex items-center gap-1 text-xs text-eidola-orange bg-orange-50 px-2 py-1 rounded-full">
               <Clock className="w-3 h-3" />
@@ -253,7 +247,8 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
             <span>·</span>
             <span className="text-purple-600">{susCount} AI?</span>
             {isBusted && (
-              <span className="text-xs text-white bg-gradient-to-r from-purple-500 to-pink-500 px-1.5 py-0.5 rounded font-medium">
+              <span className="flex items-center gap-1 text-xs text-white bg-gradient-to-r from-purple-500 to-pink-500 px-2 py-0.5 rounded-full font-medium">
+                <Bot className="w-3 h-3" />
                 Busted
               </span>
             )}

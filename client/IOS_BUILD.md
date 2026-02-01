@@ -73,9 +73,41 @@ The following permissions are configured:
 
 ## Building for Simulator
 
+### Option 1: Command Line (Recommended)
+
+```bash
+cd ~/projects/pareidolia-app/client
+
+# First, sync the web build
+npm run ios:sync
+
+# Then build with xcodebuild
+cd ios/App
+xcodebuild -workspace App.xcworkspace -scheme App \
+  -destination "platform=iOS Simulator,name=iPhone 17 Pro" \
+  -configuration Debug build
+```
+
+The built app will be in:
+`~/Library/Developer/Xcode/DerivedData/App-*/Build/Products/Debug-iphonesimulator/App.app`
+
+To run in simulator after build:
+```bash
+# Boot simulator if needed
+xcrun simctl boot "iPhone 17 Pro"
+
+# Install and launch
+xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/App-*/Build/Products/Debug-iphonesimulator/App.app
+xcrun simctl launch booted io.eidola.app
+```
+
+### Option 2: Xcode GUI
+
 1. Run `npm run ios:open` to open Xcode
-2. Select a simulator device from the dropdown (e.g., "iPhone 15")
+2. Select a simulator device from the dropdown (e.g., "iPhone 17 Pro")
 3. Press Cmd+R or click the Play button to build and run
+
+> **Note**: The Capacitor CLI (`npx cap run ios`) may have issues selecting simulators. Use xcodebuild directly for reliable command-line builds.
 
 ## Building for Device
 
