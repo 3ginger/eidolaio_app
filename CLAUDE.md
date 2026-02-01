@@ -73,6 +73,35 @@ npm run ios:run     # Build and run on simulator/device
 
 See `client/IOS_BUILD.md` for detailed build instructions.
 
+### TestFlight Deployment (fastlane)
+```bash
+cd client/ios/App
+fastlane beta
+```
+
+This will:
+1. Increment build number
+2. Build the app
+3. Upload to TestFlight
+4. Clean up simulators
+
+**Key files:**
+- `client/ios/App/fastlane/Fastfile` — build lane config
+- `client/ios/App/fastlane/api_key.json` — App Store Connect API key
+- `client/ios/App/fastlane/AuthKey_KVXD55W4F8.p8` — API private key
+
+**Export Compliance:**
+`ITSAppUsesNonExemptEncryption: false` is set in Info.plist — this auto-fills Apple's export compliance, so no manual approval needed.
+
+**Before first deploy:**
+1. Sync web assets: `cd client && npm run build && npm run ios:sync`
+2. Ensure Team ID is set: `TEAM_ID=CB6V77L93X`
+
+**App Store Connect:**
+- App ID: 6758575496
+- Bundle ID: io.eidola.app
+- Team ID: CB6V77L93X
+
 ## API Authentication Pattern
 
 **IMPORTANT**: All authenticated API calls must include the Clerk token in the Authorization header.
