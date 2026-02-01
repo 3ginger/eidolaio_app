@@ -119,35 +119,208 @@ xcrun simctl launch booted io.eidola.app
    - Select a development team in the project settings
    - Trust the developer certificate on your device
 
-## App Store Deployment
+## Code Signing and TestFlight Deployment
 
-### 1. Prepare for Release
+### Prerequisites for App Store / TestFlight
 
-1. Update version numbers in Xcode:
-   - Select "App" target
-   - General > Identity > Version and Build
+- **Apple Developer Account** (paid, $99/year)
+- **Bundle ID registered** in Apple Developer portal: `io.eidola.app`
+- **App created** in App Store Connect
 
-2. Create app icons (if not already done):
-   - Icons are in `ios/App/App/Assets.xcassets/AppIcon.appiconset/`
-   - 1024x1024 is required for App Store
+### Step-by-Step Signing Instructions
 
-3. Update splash screen if needed:
-   - Located in `ios/App/App/Assets.xcassets/Splash.imageset/`
+#### 1. Open Xcode
 
-### 2. Archive and Upload
+From the terminal in the `client/` directory:
+```bash
+npm run ios:open
+```
 
-1. In Xcode, select "Any iOS Device" as target
-2. Product > Archive
-3. In Organizer, click "Distribute App"
-4. Choose "App Store Connect"
-5. Follow prompts to upload
+This opens the Xcode workspace at `ios/App/App.xcworkspace`.
 
-### 3. App Store Connect
+#### 2. Sign in to Apple Developer Account
 
-1. Go to https://appstoreconnect.apple.com
-2. Create new app with bundle ID `io.eidola.app`
-3. Fill in app metadata, screenshots, etc.
-4. Submit for review
+1. In Xcode menu bar, go to **Xcode > Settings** (or press `Cmd + ,`)
+2. Click the **Accounts** tab
+3. Click the **+** button in the bottom left
+4. Choose **Apple ID** and sign in with your Apple Developer account credentials
+5. Once signed in, you should see your account listed with your team name below it
+6. Close the Settings window
+
+#### 3. Configure Project Signing
+
+1. In the left sidebar (Project Navigator), click the **blue "App" icon** at the very top
+2. Make sure the **"App" target** is selected under "TARGETS" (not the project under "PROJECT")
+3. Click the **"Signing & Capabilities"** tab at the top of the main editor area
+4. Under **"Team"**, click the dropdown and select your Apple Developer team
+   - If you don't see your team, make sure you completed step 2
+5. Check that **"Automatically manage signing"** is enabled (should have a checkmark)
+6. Verify the **Bundle Identifier** is `io.eidola.app`
+7. Xcode will automatically create a provisioning profile. You should see:
+   - ✓ **Signing Certificate**: "Apple Distribution: [Your Name]"
+   - ✓ **Provisioning Profile**: "Xcode Managed Profile"
+
+If you see any errors:
+- Make sure `io.eidola.app` is registered in your Apple Developer account
+- Try toggling "Automatically manage signing" off and back on
+- Check that your Apple Developer account is in good standing
+
+#### 4. Verify Version and Build Numbers
+
+Current settings (already configured):
+- **Version**: 1.0.0 (shown as "1.0" in MARKETING_VERSION)
+- **Build**: 1 (shown in CURRENT_PROJECT_VERSION)
+
+To change these later:
+1. Select the **App target**
+2. Go to **General** tab
+3. Find the **Identity** section
+4. Update **Version** (e.g., 1.0.0) and **Build** (e.g., 1)
+
+> **Note**: Each TestFlight upload must have a unique build number. Increment the build for each submission.
+
+### Archiving and Uploading to TestFlight
+
+#### 1. Select Build Destination
+
+In the Xcode toolbar (top left), click the device dropdown and select:
+**"Any iOS Device (arm64)"**
+
+> Do NOT select a specific device or simulator
+
+#### 2. Create Archive
+
+1. In the menu bar: **Product > Archive**
+2. Wait for the build to complete (may take 1-2 minutes)
+3. The **Organizer** window will open automatically showing your archive
+
+If you see build errors:
+- Make sure signing is configured correctly (step 3 above)
+- Check that you selected "Any iOS Device" not a simulator
+
+#### 3. Distribute to TestFlight
+
+In the Organizer window:
+
+1. Your new archive should be selected. Click **"Distribute App"**
+2. Choose **"App Store Connect"** and click **Next**
+3. Choose **"Upload"** and click **Next**
+4. Select signing options:
+   - ✓ **"Automatically manage signing"** (recommended)
+   - Click **Next**
+5. Review the app information and click **Upload**
+6. Wait for the upload to complete
+
+You'll see "Upload Successful" when done.
+
+#### 4. TestFlight Processing
+
+1. Go to [App Store Connect](https://appstoreconnect.apple.com)
+2. Select your **Eidola** app
+3. Go to **TestFlight** tab
+4. Under **iOS**, you'll see your build with status **"Processing"**
+   - This can take 5-15 minutes
+   - You'll get an email when processing is complete
+5. Once processing is done, the build status will be **"Ready to Submit"**
+   - You may need to fill out **Export Compliance** information:
+     - Does your app use encryption? → Usually "No" for standard HTTPS apps
+6. Add **internal or external testers** to start testing
+
+### Troubleshooting Signing Issues
+
+#### "Failed to create provisioning profile"
+- Verify `io.eidola.app` is registered in your Apple Developer account at [developer.apple.com](https://developer.apple.com/account/resources/identifiers/list)
+- Make sure your Apple Developer account membership is active
+
+#### "No signing certificate found"
+- Go to Xcode > Settings > Accounts
+- Select your account and click **"Manage Certificates..."**
+- Click **+** and choose **"Apple Distribution"**
+
+#### "The bundle identifier is already in use"
+- Make sure you're signed in with the correct Apple ID that owns this bundle ID
+- If someone else owns it, you'll need to use a different bundle ID
+
+#### "This build is invalid"
+- Check that your version/build number hasn't been used before
+- Increment the build number and try again
+
+## Automated TestFlight Deployment with Fastlane
+
+For automated builds and uploads, use the fastlane setup in `ios/App/fastlane/`.
+
+### Initial Setup
+
+Run the interactive setup script:
+```bash
+cd client/ios/App/fastlane
+./setup_testflight.sh
+```
+
+This will:
+1. Configure your Apple Developer Team ID
+2. Set up App Store Connect API key
+3. Update project signing configuration
+
+### Fastlane Lanes
+
+| Command | Description |
+|---------|-------------|
+| `fastlane build` | Build the app for TestFlight (no upload) |
+| `fastlane beta` | Build and upload to TestFlight |
+| `fastlane upload` | Upload existing IPA to TestFlight |
+| `fastlane release` | Sync web app, build, and upload |
+| `fastlane check_signing` | Verify signing configuration |
+
+### Quick Deployment
+
+```bash
+# From client directory
+npm run ios:sync
+
+# From fastlane directory
+cd ios/App/fastlane
+fastlane beta
+```
+
+### Environment Variables
+
+If you prefer environment variables over the API key file:
+```bash
+export TEAM_ID="YOUR_TEAM_ID"
+export ASC_KEY_ID="YOUR_KEY_ID"
+export ASC_ISSUER_ID="YOUR_ISSUER_ID"
+```
+
+## App Store Deployment (After TestFlight)
+
+### 1. Prepare Store Listing
+
+In [App Store Connect](https://appstoreconnect.apple.com):
+
+1. Create app metadata:
+   - App name, subtitle, description
+   - Keywords for search
+   - Support URL and privacy policy URL
+   - App category (Social Networking or Photo & Video)
+
+2. Upload screenshots (required sizes):
+   - 6.5" display (iPhone 14 Pro Max): 1290 x 2796 px
+   - 5.5" display (iPhone 8 Plus): 1242 x 2208 px
+
+3. Upload app icon:
+   - 1024x1024 px (already created in Assets.xcassets)
+   - Xcode will automatically include this
+
+4. Add age rating and content information
+
+### 2. Submit for Review
+
+1. Select a TestFlight build for release
+2. Choose manual or automatic release
+3. Fill in review notes if needed
+4. Click **"Submit for Review"**
+5. Review typically takes 24-48 hours
 
 ## Troubleshooting
 

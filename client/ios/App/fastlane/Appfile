@@ -1,0 +1,8 @@
+# Appfile for Eidola
+
+app_identifier("io.eidola.app")
+apple_id(ENV["APPLE_ID"])
+team_id(ENV["TEAM_ID"])
+
+# Uncomment if you need itc_team_id
+# itc_team_id("123456789")
