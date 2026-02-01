@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
-import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { SignedIn, SignedOut, RedirectToSignIn, useAuth } from '@clerk/clerk-react'
+import { Capacitor } from '@capacitor/core'
 import LandingPage from './pages/LandingPage'
 import FeedPage from './pages/FeedPage'
 import ExplorePage from './pages/ExplorePage'
@@ -15,6 +16,23 @@ import MobileNav from './components/layout/MobileNav'
 
 // Check if Clerk is configured
 const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+
+function NativeLandingRedirect() {
+  const { isLoaded } = useAuth()
+
+  // If running in native app, redirect to feed (ProtectedRoute will handle auth)
+  if (Capacitor.isNativePlatform()) {
+    if (!isLoaded) {
+      // Wait for auth to load
+      return null
+    }
+
+    return <Navigate to="/feed" replace />
+  }
+
+  // Show landing page on web
+  return <LandingPage />
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!hasClerk) {
@@ -49,8 +67,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public landing page */}
-        <Route path="/" element={<LandingPage />} />
+        {/* Public landing page (redirects to /feed or /login on native) */}
+        <Route path="/" element={<NativeLandingRedirect />} />
 
         {/* Protected app routes */}
         <Route path="/feed" element={

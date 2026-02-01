@@ -72,23 +72,23 @@ export default function ExplorePage() {
 
       {isLoading ? (
         <LoadingSpinner className="h-full" />
+      ) : !posts || posts.length === 0 ? (
+        <EmptyState
+          icon={<MapPin className="w-12 h-12" />}
+          title="No discoveries yet"
+          description="Be the first to share a pareidolia discovery in your area!"
+          className="h-full"
+        />
       ) : view === 'map' ? (
         <MapView
-          posts={posts || []}
+          posts={posts}
           center={lat && lng ? [lat, lng] : undefined}
           zoom={lat && lng ? 13 : 3}
         />
       ) : (
         <div className="overflow-y-auto h-full">
-          {!posts || posts.length === 0 ? (
-            <EmptyState
-              icon={<MapPin className="w-12 h-12" />}
-              title="No discoveries nearby"
-              className="h-full"
-            />
-          ) : (
-            <div className="grid grid-cols-2 gap-2 p-2">
-              {posts.map(post => (
+          <div className="grid grid-cols-2 gap-2 p-2">
+            {posts.map(post => (
                 <Link
                   key={post.id}
                   to={`/post/${post.id}`}
@@ -117,8 +117,7 @@ export default function ExplorePage() {
                   )}
                 </Link>
               ))}
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>
