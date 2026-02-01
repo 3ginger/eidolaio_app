@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { SignedIn, SignedOut, SignInButton, SignUpButton, useSignIn } from '@clerk/clerk-react'
-import { Browser } from '@capacitor/browser'
 import {
   Camera,
   Pencil,
@@ -20,25 +19,29 @@ import { isNativePlatform } from '../utils/nativeAuth'
 const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 /**
- * Native OAuth button that uses ASWebAuthenticationSession via @capacitor/browser
- * This avoids the "disallowed_useragent" error from Google
+ * Native OAuth button that uses ASWebAuthenticationSession via custom native plugin
+ * This avoids the "disallowed_useragent" error from Google by using the system browser modal
  */
 function NativeAuthButtons() {
-  const { signIn, isLoaded } = useSignIn()
+  const { signIn, setActive, isLoaded } = useSignIn()
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState<'google' | 'apple' | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleOAuth = async (strategy: 'oauth_google' | 'oauth_apple') => {
     if (!signIn || !isLoaded) return
 
     setIsLoading(strategy === 'oauth_google' ? 'google' : 'apple')
+    setError(null)
 
     try {
       // Create the OAuth sign-in attempt
       // This gives us the URL to the OAuth provider
+      console.log('[NativeAuthButtons] Creating sign-in with strategy:', strategy)
       await signIn.create({
         strategy,
         redirectUrl: 'eidola://oauth-callback',
-        actionCompleteRedirectUrl: 'eidola://oauth-complete'
+        actionCompleteRedirectUrl: 'eidola://oauth-callback'
       })
 
       // Get the OAuth authorization URL from the sign-in attempt
@@ -53,30 +56,59 @@ function NativeAuthButtons() {
 
       if (!authUrl) {
         console.error('[NativeAuthButtons] No OAuth URL returned. Verification:', verification)
+        setError('Failed to get OAuth URL')
         setIsLoading(null)
         return
       }
 
-      console.log('[NativeAuthButtons] Opening OAuth URL in system browser:', authUrl.toString())
+      console.log('[NativeAuthButtons] Opening OAuth URL via ASWebAuthenticationSession:', authUrl.toString())
 
-      // Open the OAuth URL in ASWebAuthenticationSession (system browser modal)
-      // This is the key - Browser.open() uses ASWebAuthenticationSession on iOS
-      await Browser.open({
+      // Import the native plugin dynamically (only works on iOS)
+      const { default: NativeAuth } = await import('../plugins/NativeAuth')
+
+      // Open ASWebAuthenticationSession - this shows a system browser modal
+      // and automatically captures the callback URL
+      const result = await NativeAuth.authenticate({
         url: authUrl.toString(),
-        presentationStyle: 'popover', // This triggers ASWebAuthenticationSession on iOS
-        windowName: '_blank'
+        callbackURLScheme: 'eidola'
       })
 
-      // Note: The callback is handled by NativeOAuthHandler component
-      // which listens for appUrlOpen events
-    } catch (error) {
-      console.error('[NativeAuthButtons] OAuth error:', error)
+      console.log('[NativeAuthButtons] ASWebAuthenticationSession returned:', result.url)
+
+      // The callback URL contains the OAuth result
+      // Reload the signIn to get the session
+      await signIn.reload()
+
+      console.log('[NativeAuthButtons] After reload - status:', signIn.status, 'sessionId:', signIn.createdSessionId)
+
+      if (signIn.status === 'complete' && signIn.createdSessionId) {
+        // Set the session as active
+        await setActive({ session: signIn.createdSessionId })
+        console.log('[NativeAuthButtons] Session activated, navigating to feed')
+        navigate('/feed', { replace: true })
+      } else {
+        console.error('[NativeAuthButtons] Sign-in not complete after callback')
+        setError('Authentication incomplete')
+        setIsLoading(null)
+      }
+    } catch (err) {
+      console.error('[NativeAuthButtons] OAuth error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Authentication failed'
+      // Don't show error for user cancellation
+      if (!errorMessage.includes('USER_CANCELLED') && !errorMessage.includes('cancelled')) {
+        setError(errorMessage)
+      }
       setIsLoading(null)
     }
   }
 
   return (
     <div className="flex flex-col gap-3 w-full max-w-xs mx-auto">
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded-lg text-sm text-center">
+          {error}
+        </div>
+      )}
       <button
         onClick={() => handleOAuth('oauth_google')}
         disabled={!isLoaded || isLoading !== null}
