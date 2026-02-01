@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
-import { SignedIn, SignedOut, RedirectToSignIn, useAuth } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, RedirectToSignIn, useAuth, AuthenticateWithRedirectCallback } from '@clerk/clerk-react'
 import { Capacitor } from '@capacitor/core'
 import LandingPage from './pages/LandingPage'
+import NativeOAuthHandler from './components/auth/NativeOAuthHandler'
 import FeedPage from './pages/FeedPage'
 import ExplorePage from './pages/ExplorePage'
 import ChallengesPage from './pages/ChallengesPage'
@@ -18,7 +19,10 @@ import MobileNav from './components/layout/MobileNav'
 const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 function NativeLandingRedirect() {
-  const isNative = Capacitor.isNativePlatform()
+  // Check for native flag in URL (set by Capacitor config)
+  // Capacitor.isNativePlatform() doesn't work reliably with remote URLs
+  const urlParams = new URLSearchParams(window.location.search)
+  const isNative = urlParams.get('native') === 'true' || Capacitor.isNativePlatform()
 
   // If running in native app, redirect to feed immediately
   // ProtectedRoute will handle showing login if not authenticated
@@ -74,9 +78,15 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Handle OAuth deep link callbacks in native app */}
+      <NativeOAuthHandler />
+
       <Routes>
         {/* Public landing page (redirects to /feed or /login on native) */}
         <Route path="/" element={<NativeLandingRedirect />} />
+
+        {/* SSO callback route for web OAuth flow */}
+        <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
 
         {/* Protected app routes */}
         <Route path="/feed" element={
