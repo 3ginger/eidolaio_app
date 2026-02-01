@@ -193,31 +193,6 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
         )}
       </div>
 
-      {/* Trust meter - only show if there are votes */}
-      {totalVotes > 0 && !isBusted && (
-        <div className="px-4 py-2">
-          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-            <span className="text-green-600">{realCount} real</span>
-            <span>·</span>
-            <span className="text-purple-600">{susCount} AI?</span>
-            <span className="ml-auto font-medium" style={{ 
-              color: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626' 
-            }}>
-              {trustPercent}% trust
-            </span>
-          </div>
-          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="h-full transition-all duration-300 rounded-full"
-              style={{ 
-                width: `${trustPercent}%`,
-                backgroundColor: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
-              }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Actions */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-4">
@@ -237,10 +212,10 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
           </Link>
 
           {/* Busted indicator - grouped with other stats */}
-          {isBusted && susCount > 0 && (
-            <span className="flex items-center gap-1 text-purple-600">
-              <Bot className="w-5 h-5" />
-              <span className="text-sm font-medium">{susCount}</span>
+          {isBusted && (
+            <span className="flex items-center gap-1 text-xs text-white bg-gradient-to-r from-purple-500 to-pink-500 px-2.5 py-1 rounded-full font-medium shadow-sm">
+              <Bot className="w-3.5 h-3.5" />
+              Busted{susCount > 0 ? ` · ${susCount}` : ''}
             </span>
           )}
         </div>
@@ -277,6 +252,31 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
           <Share2 className="w-6 h-6" />
         </button>
       </div>
+
+      {/* Trust meter - only show if there are votes */}
+      {totalVotes > 0 && !isBusted && (
+        <div className="px-4 py-2">
+          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+            <span className="text-green-600">{realCount} real</span>
+            <span>·</span>
+            <span className="text-purple-600">{susCount} AI?</span>
+            <span className="ml-auto font-medium" style={{
+              color: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
+            }}>
+              {trustPercent}% trust
+            </span>
+          </div>
+          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full transition-all duration-300 rounded-full"
+              style={{
+                width: `${trustPercent}%`,
+                backgroundColor: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Confess banner for owner - different based on trust level */}
       {post.isOwner && !isBusted && (susCount > 0 || realCount > 0) && onConfess && (() => {
