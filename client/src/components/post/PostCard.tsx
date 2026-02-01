@@ -210,14 +210,6 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
             <MessageCircle className="w-6 h-6" />
             <span className="text-sm font-medium">{post.commentsCount}</span>
           </Link>
-
-          {/* Busted indicator - grouped with other stats */}
-          {isBusted && (
-            <span className="flex items-center gap-1 text-xs text-white bg-gradient-to-r from-purple-500 to-pink-500 px-2.5 py-1 rounded-full font-medium shadow-sm">
-              <Bot className="w-3.5 h-3.5" />
-              Busted{susCount > 0 ? ` · ${susCount}` : ''}
-            </span>
-          )}
         </div>
 
         {/* Trust voting buttons */}
@@ -253,15 +245,20 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
         </button>
       </div>
 
-      {/* Trust meter - only show if there are votes */}
-      {totalVotes > 0 && !isBusted && (
+      {/* Trust meter - show if there are votes (including for busted posts) */}
+      {totalVotes > 0 && (
         <div className="px-4 py-2">
           <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
             <span className="text-green-600">{realCount} real</span>
             <span>·</span>
             <span className="text-purple-600">{susCount} AI?</span>
+            {isBusted && (
+              <span className="text-xs text-white bg-gradient-to-r from-purple-500 to-pink-500 px-1.5 py-0.5 rounded font-medium">
+                Busted
+              </span>
+            )}
             <span className="ml-auto font-medium" style={{
-              color: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
+              color: isBusted ? '#a855f7' : trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
             }}>
               {trustPercent}% trust
             </span>
@@ -271,7 +268,7 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
               className="h-full transition-all duration-300 rounded-full"
               style={{
                 width: `${trustPercent}%`,
-                backgroundColor: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
+                backgroundColor: isBusted ? '#a855f7' : trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
               }}
             />
           </div>
