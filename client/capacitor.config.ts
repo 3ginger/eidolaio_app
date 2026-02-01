@@ -10,6 +10,21 @@ const config: CapacitorConfig = {
     url: 'https://eidola.io',
     androidScheme: 'https',
     iosScheme: 'https',
+    // Allow OAuth providers to stay within the WebView (not open external browser)
+    allowNavigation: [
+      'eidola.io',
+      '*.eidola.io',
+      'clerk.eidola.io',
+      '*.clerk.accounts.dev',
+      'accounts.clerk.dev',
+      '*.accounts.dev',
+      // Google OAuth
+      'accounts.google.com',
+      '*.google.com',
+      // Apple OAuth
+      'appleid.apple.com',
+      '*.apple.com',
+    ],
   },
   ios: {
     // Allow inline media playback
