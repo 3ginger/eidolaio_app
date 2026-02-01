@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useClerk } from '@clerk/clerk-react'
+import { useSignIn, useSignUp, useClerk } from '@clerk/clerk-react'
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { isNativePlatform, isOAuthCallback } from '../../utils/nativeAuth'
@@ -8,69 +8,121 @@ import { isNativePlatform, isOAuthCallback } from '../../utils/nativeAuth'
 /**
  * Handles OAuth callbacks in native Capacitor app via deep links
  *
- * When user completes OAuth in system browser, the app receives
- * a deep link callback (eidola://oauth-callback?...) which this
- * component processes to establish the Clerk session.
+ * Flow:
+ * 1. User taps OAuth button -> signIn.create() stores OAuth state
+ * 2. Browser.open() opens OAuth URL in ASWebAuthenticationSession
+ * 3. User authenticates with provider
+ * 4. Provider redirects to eidola://oauth-callback
+ * 5. This component receives the deep link
+ * 6. We reload signIn to get the session created by Clerk
+ * 7. Set the session as active
  */
 export default function NativeOAuthHandler() {
   const navigate = useNavigate()
+  const { signIn, setActive: setSignInActive } = useSignIn()
+  const { signUp, setActive: setSignUpActive } = useSignUp()
   const clerk = useClerk()
+
+  const handleOAuthCallback = useCallback(async (url: string) => {
+    console.log('[NativeOAuthHandler] Received deep link:', url)
+
+    if (!isOAuthCallback(url)) {
+      console.log('[NativeOAuthHandler] Not an OAuth callback, ignoring')
+      return
+    }
+
+    // Close the browser window
+    try {
+      await Browser.close()
+    } catch (e) {
+      console.log('[NativeOAuthHandler] Browser close error (expected):', e)
+    }
+
+    console.log('[NativeOAuthHandler] Processing OAuth callback...')
+
+    try {
+      // Try to reload signIn first (most common case)
+      if (signIn) {
+        console.log('[NativeOAuthHandler] Reloading signIn...')
+        await signIn.reload()
+
+        console.log('[NativeOAuthHandler] SignIn status:', signIn.status)
+        console.log('[NativeOAuthHandler] SignIn createdSessionId:', signIn.createdSessionId)
+
+        if (signIn.status === 'complete' && signIn.createdSessionId) {
+          console.log('[NativeOAuthHandler] Setting active session from signIn')
+          await setSignInActive({ session: signIn.createdSessionId })
+          navigate('/feed', { replace: true })
+          return
+        }
+      }
+
+      // Try signUp if signIn didn't work (new user)
+      if (signUp) {
+        console.log('[NativeOAuthHandler] Trying signUp reload...')
+        await signUp.reload()
+
+        console.log('[NativeOAuthHandler] SignUp status:', signUp.status)
+
+        if (signUp.status === 'complete' && signUp.createdSessionId) {
+          console.log('[NativeOAuthHandler] Setting active session from signUp')
+          await setSignUpActive({ session: signUp.createdSessionId })
+          navigate('/feed', { replace: true })
+          return
+        }
+      }
+
+      // Fallback: try clerk.handleRedirectCallback for web-style callbacks
+      console.log('[NativeOAuthHandler] Trying handleRedirectCallback fallback...')
+      await clerk.handleRedirectCallback({
+        redirectUrl: url
+      })
+
+      // Check if we now have an active session
+      if (clerk.session) {
+        console.log('[NativeOAuthHandler] Session established via handleRedirectCallback')
+        navigate('/feed', { replace: true })
+        return
+      }
+
+      console.error('[NativeOAuthHandler] No session created after OAuth callback')
+      navigate('/', { replace: true })
+
+    } catch (error) {
+      console.error('[NativeOAuthHandler] Failed to handle OAuth callback:', error)
+      navigate('/', { replace: true })
+    }
+  }, [signIn, signUp, setSignInActive, setSignUpActive, clerk, navigate])
 
   useEffect(() => {
     if (!isNativePlatform()) {
       return
     }
 
-    // Listen for app URL open events (deep links)
+    console.log('[NativeOAuthHandler] Setting up deep link listener')
+
+    let listener: { remove: () => void } | null = null
+
     const setupListener = async () => {
-      const listener = await App.addListener('appUrlOpen', async ({ url }) => {
-        console.log('[NativeOAuthHandler] Received deep link:', url)
-
-        if (!isOAuthCallback(url)) {
-          console.log('[NativeOAuthHandler] Not an OAuth callback, ignoring')
-          return
-        }
-
-        try {
-          // Close the system browser window
-          await Browser.close()
-        } catch (e) {
-          // Browser may already be closed
-          console.log('[NativeOAuthHandler] Browser close error (may be expected):', e)
-        }
-
-        try {
-          // Handle the OAuth callback to establish session
-          // The URL contains the OAuth response parameters
-          console.log('[NativeOAuthHandler] Processing OAuth callback...')
-          await clerk.handleRedirectCallback({
-            redirectUrl: url
-          })
-          console.log('[NativeOAuthHandler] OAuth callback processed successfully')
-
-          // Navigate to feed after successful auth
-          navigate('/feed', { replace: true })
-        } catch (error) {
-          console.error('[NativeOAuthHandler] Failed to handle OAuth callback:', error)
-          // On error, navigate to home to show login options
-          navigate('/', { replace: true })
-        }
+      listener = await App.addListener('appUrlOpen', ({ url }) => {
+        handleOAuthCallback(url)
       })
-
-      return listener
     }
 
-    let cleanup: (() => void) | undefined
+    setupListener()
 
-    setupListener().then((listener) => {
-      cleanup = () => listener.remove()
+    // Also check if app was launched with a URL (cold start)
+    App.getLaunchUrl().then((launchUrl) => {
+      if (launchUrl?.url && isOAuthCallback(launchUrl.url)) {
+        console.log('[NativeOAuthHandler] App launched with OAuth callback URL')
+        handleOAuthCallback(launchUrl.url)
+      }
     })
 
     return () => {
-      cleanup?.()
+      listener?.remove()
     }
-  }, [clerk, navigate])
+  }, [handleOAuthCallback])
 
-  // This component doesn't render anything
   return null
 }
