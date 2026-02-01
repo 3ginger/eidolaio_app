@@ -5,11 +5,9 @@ const config: CapacitorConfig = {
   appName: 'Eidola',
   webDir: 'dist',
   server: {
-    // For development, uncomment to load from the web URL:
-    // url: 'https://eidola.io',
-    // cleartext: true,
-
-    // For production, we bundle the built web app
+    // Load from production URL so Clerk auth works
+    // (Clerk production keys only work on approved domains)
+    url: 'https://eidola.io',
     androidScheme: 'https',
     iosScheme: 'https',
   },
