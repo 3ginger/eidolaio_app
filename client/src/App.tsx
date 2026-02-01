@@ -19,12 +19,17 @@ const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 function NativeLandingRedirect() {
   const { isLoaded } = useAuth()
+  const isNative = Capacitor.isNativePlatform()
 
   // If running in native app, redirect to feed (ProtectedRoute will handle auth)
-  if (Capacitor.isNativePlatform()) {
+  if (isNative) {
     if (!isLoaded) {
-      // Wait for auth to load
-      return null
+      // Show loading spinner while auth loads
+      return (
+        <div className="min-h-screen bg-eidola-bg flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-eidola-purple"></div>
+        </div>
+      )
     }
 
     return <Navigate to="/feed" replace />
