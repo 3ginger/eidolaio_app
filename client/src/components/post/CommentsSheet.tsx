@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useComments } from '../../hooks/usePosts'
 import { formatRelativeDate } from '../../utils/dateTime'
 import Avatar from '../ui/Avatar'
@@ -90,7 +91,7 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
 
   if (!postId) return null
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] bg-black/50"
       onClick={handleBackdropClick}
@@ -104,7 +105,7 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
       <div
         className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl flex flex-col"
         style={{
-          height: '60vh',
+          maxHeight: '60vh',
           overscrollBehavior: 'contain',
           transform: isClosing ? 'translateY(100%)' : `translateY(${dragY}px)`,
           transition: isDragging ? 'none' : 'transform 0.3s ease-out',
@@ -163,7 +164,7 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
 
         {/* Comment input - always visible at bottom */}
         <div
-          className="flex-shrink-0 border-t bg-white px-4 py-3"
+          className="flex-shrink-0 border-t bg-white rounded-b-none px-4 py-3"
           style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}
         >
           <form onSubmit={handleSubmit} className="flex items-center gap-3">
@@ -193,6 +194,7 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
