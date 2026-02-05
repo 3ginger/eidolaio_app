@@ -4,6 +4,7 @@ import type { Post } from '../../types/post'
 import NSFWOverlay from '../common/NSFWOverlay'
 import Avatar from '../ui/Avatar'
 import DrawingToggleButton from '../ui/DrawingToggleButton'
+import InlineComments from './InlineComments'
 import { getTimeRemaining, formatRelativeDate } from '../../utils/dateTime'
 import { calculateConfessionPoints } from '../../config/points'
 import { extractDrawingDataUrl, hasValidDrawing } from '../../utils/drawing'
@@ -15,9 +16,10 @@ interface PostCardProps {
   onSus?: (postId: number) => Promise<void>
   onReal?: (postId: number) => Promise<void>
   onConfess?: (postId: number) => Promise<void>
+  onComment?: (postId: number) => void
 }
 
-export default function PostCard({ post, onLike, onSus, onReal, onConfess }: PostCardProps) {
+export default function PostCard({ post, onLike, onSus, onReal, onConfess, onComment }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(post.isLiked || false)
   const [likesCount, setLikesCount] = useState(post.likesCount)
   const [isSus, setIsSus] = useState(post.isSus || false)
@@ -119,7 +121,7 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
         <Link to={`/profile/${post.user?.username}`} className="flex items-center gap-3">
           <Avatar user={{ avatarUrl: post.user?.avatarUrl, username: post.user?.username }} />
           <div>
-            <span className="font-semibold text-sm">@{post.user?.username}</span>
+            <span className="font-semibold text-sm">{post.user?.username}</span>
             {post.address && (
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <MapPin className="w-3 h-3" />
@@ -148,31 +150,29 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
 
       {/* Image */}
       <div className="relative">
-        <Link to={`/post/${post.id}`} className="block">
-          {post.isNsfw && !showNsfw ? (
-            <NSFWOverlay onReveal={() => setShowNsfw(true)}>
-              <img
-                src={post.thumbnailUrl || post.imageUrl}
-                alt={post.title || 'Pareidolia'}
-                className="w-full aspect-square object-cover blur-xl"
-              />
-            </NSFWOverlay>
-          ) : (
-            <div className="relative" onDoubleClick={handleDoubleTap}>
-              <img
-                src={showDrawing && drawingDataUrl ? drawingDataUrl : (post.thumbnailUrl || post.imageUrl)}
-                alt={post.title || 'Pareidolia'}
-                className="w-full aspect-square object-cover"
-              />
-              {/* Heart animation on double tap */}
-              {heartAnimation && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <Heart className="w-24 h-24 text-red-500 fill-current heart-pop" />
-                </div>
-              )}
-            </div>
-          )}
-        </Link>
+        {post.isNsfw && !showNsfw ? (
+          <NSFWOverlay onReveal={() => setShowNsfw(true)}>
+            <img
+              src={post.thumbnailUrl || post.imageUrl}
+              alt={post.title || 'Pareidolia'}
+              className="w-full aspect-square object-cover blur-xl"
+            />
+          </NSFWOverlay>
+        ) : (
+          <div className="relative" onDoubleClick={handleDoubleTap}>
+            <img
+              src={showDrawing && drawingDataUrl ? drawingDataUrl : (post.thumbnailUrl || post.imageUrl)}
+              alt={post.title || 'Pareidolia'}
+              className="w-full aspect-square object-cover"
+            />
+            {/* Heart animation on double tap */}
+            {heartAnimation && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <Heart className="w-24 h-24 text-red-500 fill-current heart-pop" />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Drawing toggle button */}
         {hasDrawing && !post.isNsfw && (
@@ -200,10 +200,13 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
             <span className="text-sm font-medium">{likesCount}</span>
           </button>
 
-          <Link to={`/post/${post.id}`} className="flex items-center gap-1 text-gray-700">
+          <button
+            onClick={() => onComment?.(post.id)}
+            className="flex items-center gap-1 text-gray-700"
+          >
             <MessageCircle className="w-6 h-6" />
             <span className="text-sm font-medium">{post.commentsCount}</span>
-          </Link>
+          </button>
         </div>
 
         {/* Trust voting buttons */}
@@ -322,7 +325,7 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
         <div className="px-4 pb-3">
           <p className="text-sm">
             <Link to={`/profile/${post.user?.username}`} className="font-semibold">
-              @{post.user?.username}
+              {post.user?.username}
             </Link>{' '}
             {post.userCaption}
           </p>
@@ -362,6 +365,15 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess }: Pos
             </Link>
           )}
         </div>
+      )}
+
+      {/* Inline comments preview */}
+      {onComment && (
+        <InlineComments
+          postId={post.id}
+          commentsCount={post.commentsCount}
+          onViewAll={() => onComment(post.id)}
+        />
       )}
 
       {/* Timestamp */}

@@ -11,6 +11,7 @@ import chainRouter from './routes/chain.js'
 import uploadRouter from './routes/upload.js'
 import adminRouter from './routes/admin.js'
 import notificationsRouter from './routes/notifications.js'
+import nativeAuthRouter from './routes/nativeAuth.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -55,6 +56,7 @@ app.use('/api/chain', chainRouter)
 app.use('/api/upload', uploadRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/notifications', notificationsRouter)
+app.use('/api/auth', nativeAuthRouter)
 
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

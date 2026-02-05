@@ -1,14 +1,17 @@
+import { useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { useFeed, likePost, susPost, realPost, confessPost } from '../hooks/usePosts'
 import { useToast } from '../contexts/ToastContext'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import PostCard from '../components/post/PostCard'
+import CommentsSheet from '../components/post/CommentsSheet'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
 import { Loader2, RefreshCw } from 'lucide-react'
 
 export default function FeedPage() {
   const { getToken } = useAuth()
+  const [commentPostId, setCommentPostId] = useState<number | null>(null)
   const { showSuccess } = useToast()
   const { posts, isLoading, error, hasMore, loadMore, refresh } = useFeed()
 
@@ -89,28 +92,21 @@ export default function FeedPage() {
       {/* Pull to refresh indicator */}
       <div
         className="flex items-center justify-center overflow-hidden transition-all duration-200"
-        style={{ height: pullDistance > 0 ? pullDistance : 0 }}
+        style={{ height: isRefreshing ? 48 : (pullDistance > 0 ? pullDistance : 0) }}
       >
         <div
-          className={`flex items-center gap-2 text-sm text-gray-500 ${
-            isRefreshing ? 'animate-pulse' : ''
+          className={`flex items-center gap-2 text-sm ${
+            isRefreshing ? 'text-eidola-orange' : 'text-gray-500'
           }`}
-          style={{
+          style={isRefreshing ? {} : {
             transform: `rotate(${Math.min(pullDistance * 3, 360)}deg)`,
             opacity: Math.min(pullDistance / 60, 1),
           }}
         >
           <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing && <span>Refreshing...</span>}
         </div>
       </div>
-
-      {/* Refresh indicator when refreshing */}
-      {isRefreshing && (
-        <div className="py-3 flex items-center justify-center gap-2 text-sm text-eidola-orange">
-          <RefreshCw className="w-4 h-4 animate-spin" />
-          Refreshing...
-        </div>
-      )}
 
       {/* Manual refresh button (fallback for non-touch devices) */}
       {!isRefreshing && (
@@ -133,6 +129,7 @@ export default function FeedPage() {
             onSus={handleSus}
             onReal={handleReal}
             onConfess={handleConfess}
+            onComment={setCommentPostId}
           />
         ))}
       </div>
@@ -153,6 +150,12 @@ export default function FeedPage() {
           </button>
         </div>
       )}
+
+      {/* Comments sheet */}
+      <CommentsSheet
+        postId={commentPostId}
+        onClose={() => setCommentPostId(null)}
+      />
     </div>
   )
 }

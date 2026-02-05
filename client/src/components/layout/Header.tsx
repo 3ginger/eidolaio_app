@@ -30,11 +30,11 @@ export default function Header() {
   }, [isSignedIn, getToken])
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <div className="max-w-4xl mx-auto px-4 h-12 flex items-center justify-between">
         {/* Logo */}
         <Link to="/feed" className="flex items-center gap-2">
-          <img src="/logo.png" alt="Eidola" className="h-10 w-auto" />
+          <img src="/logo.png" alt="Eidola" className="h-12 w-auto" />
         </Link>
 
         {/* Search (desktop) */}
@@ -53,7 +53,7 @@ export default function Header() {
         <div className="flex items-center gap-4">
           {isAdmin && (
             <Link to="/admin" className="p-2 hover:bg-gray-100 rounded-full" title="Admin">
-              <Shield className="w-5 h-5 text-eidola-orange" />
+              <Shield className="w-6 h-6 text-eidola-orange" />
             </Link>
           )}
           <SignedIn>

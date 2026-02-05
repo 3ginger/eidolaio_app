@@ -4,34 +4,22 @@ const config: CapacitorConfig = {
   appId: 'io.eidola.app',
   appName: 'Eidola',
   webDir: 'dist',
+  // Load from production URL to fix Clerk CORS issues on iOS
+  // (capacitor://localhost origin is blocked by Clerk)
+  // NOTE: With server.url, Capacitor.isNativePlatform() returns false,
+  // so we use path-based detection in nativeAuth.ts instead
+  // Using /native path instead of ?native=true query param because
+  // WKWebView may strip query params from the initial URL
   server: {
-    // Load from production URL so Clerk auth works
-    // (Clerk production keys only work on approved domains)
-    url: 'https://eidola.io',
-    androidScheme: 'https',
-    iosScheme: 'https',
-    // Allow OAuth providers to stay within the WebView (not open external browser)
-    allowNavigation: [
-      'eidola.io',
-      '*.eidola.io',
-      'clerk.eidola.io',
-      '*.clerk.accounts.dev',
-      'accounts.clerk.dev',
-      '*.accounts.dev',
-      // Google OAuth
-      'accounts.google.com',
-      '*.google.com',
-      // Apple OAuth
-      'appleid.apple.com',
-      '*.apple.com',
-    ],
+    url: 'https://eidola.io/native',
+    cleartext: false
   },
   ios: {
     // Allow inline media playback
     allowsLinkPreview: true,
-    scrollEnabled: true,
-    // Content inset adjustment for safe areas
-    contentInset: 'automatic',
+    // Disable native WKWebView scrolling so CSS fixed positioning works correctly
+    // (web content handles its own scrolling via CSS overflow)
+    scrollEnabled: false,
   },
   plugins: {
     SplashScreen: {

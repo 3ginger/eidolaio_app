@@ -1,27 +1,30 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSignIn, useSignUp, useClerk } from '@clerk/clerk-react'
+import { useSignIn, useClerk } from '@clerk/clerk-react'
 import { App } from '@capacitor/app'
-import { Browser } from '@capacitor/browser'
 import { isNativePlatform, isOAuthCallback } from '../../utils/nativeAuth'
 
 /**
- * Handles OAuth callbacks in native Capacitor app via deep links
+ * Handles OAuth callbacks in native Capacitor app via deep links.
  *
  * Flow:
- * 1. User taps OAuth button -> signIn.create() stores OAuth state
- * 2. Browser.open() opens OAuth URL in ASWebAuthenticationSession
- * 3. User authenticates with provider
- * 4. Provider redirects to eidola://oauth-callback
- * 5. This component receives the deep link
- * 6. We reload signIn to get the session created by Clerk
- * 7. Set the session as active
+ * 1. User taps OAuth button -> ASWebAuth opens Account Portal
+ * 2. User completes Google/Apple OAuth in ASWebAuth
+ * 3. Clerk redirects to backend -> backend creates sign-in token
+ * 4. Backend redirects to https://eidola.io/sso-callback?ticket=TOKEN
+ * 5. ASWebAuth captures the redirect, Swift sends nativeOAuthCallback event
+ * 6. NativeOAuthButtons handles the event (primary path)
+ *
+ * This component handles the deep link fallback path (eidola:// scheme):
+ * - Cold start with deep link
+ * - Deep link while app is in foreground
  */
 export default function NativeOAuthHandler() {
   const navigate = useNavigate()
   const { signIn, setActive: setSignInActive } = useSignIn()
-  const { signUp, setActive: setSignUpActive } = useSignUp()
   const clerk = useClerk()
+  const processedUrlsRef = useRef<Set<string>>(new Set())
+  const processingRef = useRef(false)
 
   const handleOAuthCallback = useCallback(async (url: string) => {
     console.log('[NativeOAuthHandler] Received deep link:', url)
@@ -31,68 +34,61 @@ export default function NativeOAuthHandler() {
       return
     }
 
-    // Close the browser window
-    try {
-      await Browser.close()
-    } catch (e) {
-      console.log('[NativeOAuthHandler] Browser close error (expected):', e)
+    // Deduplicate: don't process the same URL twice
+    if (processedUrlsRef.current.has(url) || processingRef.current) {
+      console.log('[NativeOAuthHandler] Already processed/processing this URL, skipping')
+      return
     }
+    processingRef.current = true
+    processedUrlsRef.current.add(url)
 
     console.log('[NativeOAuthHandler] Processing OAuth callback...')
 
     try {
-      // Try to reload signIn first (most common case)
-      if (signIn) {
-        console.log('[NativeOAuthHandler] Reloading signIn...')
-        await signIn.reload()
+      const parsedUrl = new URL(url)
+      const ticket = parsedUrl.searchParams.get('ticket') || parsedUrl.searchParams.get('__clerk_ticket')
 
-        console.log('[NativeOAuthHandler] SignIn status:', signIn.status)
-        console.log('[NativeOAuthHandler] SignIn createdSessionId:', signIn.createdSessionId)
+      // Sign-in token approach: backend created a ticket after verifying OAuth
+      if (ticket && signIn) {
+        console.log('[NativeOAuthHandler] Using sign-in ticket')
+        const result = await signIn.create({ strategy: 'ticket', ticket })
 
-        if (signIn.status === 'complete' && signIn.createdSessionId) {
-          console.log('[NativeOAuthHandler] Setting active session from signIn')
-          await setSignInActive({ session: signIn.createdSessionId })
+        console.log('[NativeOAuthHandler] Ticket result status:', result.status)
+
+        if (result.status === 'complete' && result.createdSessionId) {
+          console.log('[NativeOAuthHandler] Setting active session:', result.createdSessionId)
+          await setSignInActive({ session: result.createdSessionId })
           navigate('/feed', { replace: true })
           return
         }
       }
 
-      // Try signUp if signIn didn't work (new user)
-      if (signUp) {
-        console.log('[NativeOAuthHandler] Trying signUp reload...')
-        await signUp.reload()
-
-        console.log('[NativeOAuthHandler] SignUp status:', signUp.status)
-
-        if (signUp.status === 'complete' && signUp.createdSessionId) {
-          console.log('[NativeOAuthHandler] Setting active session from signUp')
-          await setSignUpActive({ session: signUp.createdSessionId })
-          navigate('/feed', { replace: true })
-          return
-        }
-      }
-
-      // Fallback: try clerk.handleRedirectCallback for web-style callbacks
-      console.log('[NativeOAuthHandler] Trying handleRedirectCallback fallback...')
-      await clerk.handleRedirectCallback({
-        redirectUrl: url
-      })
-
-      // Check if we now have an active session
-      if (clerk.session) {
-        console.log('[NativeOAuthHandler] Session established via handleRedirectCallback')
+      // Fallback: check for session ID in URL params
+      const sessionId = parsedUrl.searchParams.get('__clerk_created_session')
+      if (sessionId) {
+        console.log('[NativeOAuthHandler] Using session ID from URL:', sessionId)
+        await clerk.setActive({ session: sessionId })
         navigate('/feed', { replace: true })
         return
       }
 
-      console.error('[NativeOAuthHandler] No session created after OAuth callback')
+      console.error('[NativeOAuthHandler] No ticket or session in callback URL')
       navigate('/', { replace: true })
 
-    } catch (error) {
+    } catch (error: unknown) {
+      // If already signed in, just navigate to feed
+      const clerkError = error as { errors?: Array<{ code?: string }> }
+      if (clerkError?.errors?.[0]?.code === 'session_exists') {
+        console.log('[NativeOAuthHandler] Already signed in, navigating to feed')
+        navigate('/feed', { replace: true })
+        return
+      }
       console.error('[NativeOAuthHandler] Failed to handle OAuth callback:', error)
       navigate('/', { replace: true })
+    } finally {
+      processingRef.current = false
     }
-  }, [signIn, signUp, setSignInActive, setSignUpActive, clerk, navigate])
+  }, [signIn, setSignInActive, clerk, navigate])
 
   useEffect(() => {
     if (!isNativePlatform()) {

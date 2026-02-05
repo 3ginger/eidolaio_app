@@ -1,4 +1,6 @@
 // API utility functions
+import * as Sentry from '@sentry/react'
+
 const API_BASE = import.meta.env.VITE_API_URL || 'https://api.eidola.io/api'
 
 interface FetchOptions extends RequestInit {
@@ -53,7 +55,18 @@ async function fetchApi<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-    throw new ApiError(response.status, error.error || error.message || 'Request failed')
+    const apiError = new ApiError(response.status, error.error || error.message || 'Request failed')
+
+    // Report API errors to Sentry
+    Sentry.captureException(apiError, {
+      extra: {
+        status: response.status,
+        endpoint,
+        method: fetchOptions.method || 'GET',
+      },
+    })
+
+    throw apiError
   }
 
   return response.json()

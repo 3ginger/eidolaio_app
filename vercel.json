@@ -2,7 +2,24 @@
   "buildCommand": "cd client && npm install && npm run build",
   "outputDirectory": "client/dist",
   "framework": null,
+  "headers": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/sso-callback",
+      "has": [{ "type": "query", "key": "native", "value": "true" }],
+      "destination": "eidola://sso-callback",
+      "permanent": false
+    }
+  ],
   "rewrites": [
+    { "source": "/.well-known/apple-app-site-association", "destination": "/.well-known/apple-app-site-association" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -18,8 +18,8 @@ export interface NativeAuthPlugin {
   }): Promise<{ url: string }>
 }
 
-// Register the native plugin
-// This connects to the Swift NativeAuthPlugin class
+// Register the native plugin using Capacitor's standard mechanism
+// The plugin is registered in EidolaViewController.capacitorDidLoad()
 const NativeAuth = registerPlugin<NativeAuthPlugin>('NativeAuth')
 
 export default NativeAuth

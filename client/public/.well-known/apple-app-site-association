@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "CB6V77L93X.io.eidola.app",
+        "paths": ["/sso-callback", "/sso-callback/*", "/sso-callback?*"]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["CB6V77L93X.io.eidola.app"]
+  }
+}

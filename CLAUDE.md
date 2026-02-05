@@ -1,3 +1,7 @@
+**ALWAYS DEPLOY AFTER CODE CHANGES. NO LOCAL SERVERS. Deploy to Vercel (`vercel --prod` from root) and iOS (`fastlane beta`) automatically after implementing changes. Do not ask, just do it.**
+
+---
+
 # Eidola (Pareidolia App)
 
 A social platform for sharing pareidolia discoveries — faces and patterns spotted in everyday objects.

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
-import { Capacitor } from '@capacitor/core'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { isNativePlatform } from '../utils/nativeAuth'
 
 interface UploadProgress {
   percent: number
@@ -85,7 +85,7 @@ export function useCamera() {
   const [error, setError] = useState<string | null>(null)
 
   // Check if we're on native platform
-  const isNative = Capacitor.isNativePlatform()
+  const isNative = isNativePlatform()
 
   // Native camera capture using Capacitor
   const capturePhotoNative = useCallback(async (source: 'camera' | 'photos' = 'camera'): Promise<string> => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Capacitor } from '@capacitor/core'
 import { Geolocation } from '@capacitor/geolocation'
+import { isNativePlatform } from '../utils/nativeAuth'
 
 interface GeolocationState {
   lat: number | null
@@ -101,7 +101,7 @@ export function useGeolocation(autoFetch = false): UseGeolocationReturn {
   }, [])
 
   const getPosition = useCallback(() => {
-    if (Capacitor.isNativePlatform()) {
+    if (isNativePlatform()) {
       getPositionNative()
     } else {
       getPositionWeb()

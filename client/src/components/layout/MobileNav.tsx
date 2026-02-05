@@ -14,9 +14,9 @@ export default function MobileNav() {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white border-t border-gray-100 safe-area-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white border-t border-gray-100" style={{ transform: 'translateZ(0)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="flex items-center justify-around h-16">
-        {navItems.map(({ to, icon: Icon, label }) => {
+        {navItems.map(({ to, icon: Icon }) => {
           const isActive = path === to || (to === '/profile' && path.startsWith('/profile'))
           const isCreate = to === '/create'
 
@@ -24,19 +24,16 @@ export default function MobileNav() {
             <Link
               key={to}
               to={to}
-              className={`flex flex-col items-center justify-center flex-1 h-full ${
+              className={`flex items-center justify-center flex-1 h-full ${
                 isActive ? 'text-eidola-orange' : 'text-gray-500'
               }`}
             >
               {isCreate ? (
-                <div className="w-10 h-10 btn-gradient rounded-xl flex items-center justify-center -mt-2">
+                <div className="w-10 h-10 btn-gradient rounded-xl flex items-center justify-center">
                   <Icon className="w-5 h-5 text-white" />
                 </div>
               ) : (
-                <>
-                  <Icon className="w-6 h-6" />
-                  <span className="text-xs mt-1">{label}</span>
-                </>
+                <Icon className="w-7 h-7" />
               )}
             </Link>
           )
