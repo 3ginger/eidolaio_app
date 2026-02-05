@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useComments } from '../../hooks/usePosts'
 import { formatRelativeDate } from '../../utils/dateTime'
 import Avatar from '../ui/Avatar'
@@ -80,13 +80,23 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
     }
   }
 
+  // BUG 3: Lock body scroll when sheet is open
+  useEffect(() => {
+    if (!postId) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [postId])
+
   if (!postId) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50"
+      className="fixed inset-0 z-[60] bg-black/50"
       onClick={handleBackdropClick}
+      onTouchMove={(e) => e.stopPropagation()}
       style={{
+        touchAction: 'none',
         opacity: isClosing ? 0 : 1 - dragY / 300,
         transition: isDragging ? 'none' : 'opacity 0.2s ease-out',
       }}
@@ -95,6 +105,7 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
         className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl flex flex-col"
         style={{
           height: '60vh',
+          overscrollBehavior: 'contain',
           transform: isClosing ? 'translateY(100%)' : `translateY(${dragY}px)`,
           transition: isDragging ? 'none' : 'transform 0.3s ease-out',
         }}
@@ -103,12 +114,12 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
         onTouchEnd={handleTouchEnd}
       >
         {/* Drag handle */}
-        <div className="flex justify-center py-3 cursor-grab active:cursor-grabbing">
+        <div className="flex-shrink-0 flex justify-center py-3 cursor-grab active:cursor-grabbing">
           <div className="w-10 h-1 bg-gray-300 rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 pb-3 border-b">
+        <div className="flex-shrink-0 flex items-center justify-between px-4 pb-3 border-b">
           <div className="w-8" />
           <h2 className="font-semibold text-base">Comments</h2>
           <button onClick={handleClose} className="p-1 hover:bg-gray-100 rounded-full">
@@ -117,7 +128,7 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
         </div>
 
         {/* Comments list - scrollable */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3" style={{ overscrollBehavior: 'contain' }}>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -152,7 +163,7 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
 
         {/* Comment input - always visible at bottom */}
         <div
-          className="border-t bg-white px-4 py-3"
+          className="flex-shrink-0 border-t bg-white px-4 py-3"
           style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}
         >
           <form onSubmit={handleSubmit} className="flex items-center gap-3">

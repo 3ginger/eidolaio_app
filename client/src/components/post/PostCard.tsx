@@ -4,7 +4,7 @@ import type { Post } from '../../types/post'
 import NSFWOverlay from '../common/NSFWOverlay'
 import Avatar from '../ui/Avatar'
 import DrawingToggleButton from '../ui/DrawingToggleButton'
-import InlineComments from './InlineComments'
+
 import { getTimeRemaining, formatRelativeDate } from '../../utils/dateTime'
 import { calculateConfessionPoints } from '../../config/points'
 import { extractDrawingDataUrl, hasValidDrawing } from '../../utils/drawing'
@@ -365,15 +365,6 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess, onCom
             </Link>
           )}
         </div>
-      )}
-
-      {/* Inline comments preview */}
-      {onComment && (
-        <InlineComments
-          postId={post.id}
-          commentsCount={post.commentsCount}
-          onViewAll={() => onComment(post.id)}
-        />
       )}
 
       {/* Timestamp */}
