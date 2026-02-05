@@ -5,3 +5,14 @@
 node_modules/
 dist/
 api/dist/
+
+# iOS build artifacts
+client/ios/App/*.ipa
+client/ios/App/*.dSYM.zip
+client/ios/App/fastlane/report.xml
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Playwright MCP screenshots/logs
+.playwright-mcp/
