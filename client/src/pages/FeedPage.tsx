@@ -5,6 +5,8 @@ import { useToast } from '../contexts/ToastContext'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import PostCard from '../components/post/PostCard'
 import CommentsSheet from '../components/post/CommentsSheet'
+import LocationChainSheet from '../components/post/LocationChainSheet'
+import ChallengeSheet from '../components/post/ChallengeSheet'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
 import { Loader2, RefreshCw } from 'lucide-react'
@@ -12,6 +14,8 @@ import { Loader2, RefreshCw } from 'lucide-react'
 export default function FeedPage() {
   const { getToken } = useAuth()
   const [commentPostId, setCommentPostId] = useState<number | null>(null)
+  const [chainPostId, setChainPostId] = useState<number | null>(null)
+  const [challengePostId, setChallengePostId] = useState<number | null>(null)
   const { showSuccess } = useToast()
   const { posts, isLoading, error, hasMore, loadMore, refresh } = useFeed()
 
@@ -22,6 +26,9 @@ export default function FeedPage() {
     handleTouchMove,
     handleTouchEnd,
   } = usePullToRefresh({ onRefresh: refresh })
+
+  // Find challenge post for ChallengeSheet props
+  const challengePost = challengePostId ? posts.find(p => p.id === challengePostId) : null
 
   if (isLoading && posts.length === 0) {
     return <LoadingSpinner fullHeight />
@@ -62,7 +69,7 @@ export default function FeedPage() {
     const token = await getToken()
     const result = await susPost(postId, token)
     if (result.pointsEarned && result.pointsEarned > 0) {
-      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+      showSuccess(`+${result.pointsEarned} point for contributing to the community!`)
     }
   }
 
@@ -70,7 +77,7 @@ export default function FeedPage() {
     const token = await getToken()
     const result = await realPost(postId, token)
     if (result.pointsEarned && result.pointsEarned > 0) {
-      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+      showSuccess(`+${result.pointsEarned} point for contributing to the community!`)
     }
   }
 
@@ -78,7 +85,7 @@ export default function FeedPage() {
     const token = await getToken()
     const result = await confessPost(postId, token)
     if (result.pointsEarned && result.pointsEarned > 0) {
-      showSuccess(`🎉 +${result.pointsEarned} points for being honest! Respect.`)
+      showSuccess(`+${result.pointsEarned} points for being honest! Respect.`)
     }
   }
 
@@ -130,6 +137,8 @@ export default function FeedPage() {
             onReal={handleReal}
             onConfess={handleConfess}
             onComment={setCommentPostId}
+            onLocationChain={setChainPostId}
+            onChallengeChain={setChallengePostId}
           />
         ))}
       </div>
@@ -155,6 +164,21 @@ export default function FeedPage() {
       <CommentsSheet
         postId={commentPostId}
         onClose={() => setCommentPostId(null)}
+      />
+
+      {/* Location chain sheet */}
+      <LocationChainSheet
+        postId={chainPostId}
+        onClose={() => setChainPostId(null)}
+      />
+
+      {/* Challenge sheet */}
+      <ChallengeSheet
+        postId={challengePostId}
+        imageUrl={challengePost?.imageUrl}
+        hasSubmitted={challengePost?.hasSubmitted || false}
+        submissionsCount={challengePost?.submissionsCount || 0}
+        onClose={() => setChallengePostId(null)}
       />
     </div>
   )

@@ -17,9 +17,11 @@ interface PostCardProps {
   onReal?: (postId: number) => Promise<void>
   onConfess?: (postId: number) => Promise<void>
   onComment?: (postId: number) => void
+  onLocationChain?: (postId: number) => void
+  onChallengeChain?: (postId: number) => void
 }
 
-export default function PostCard({ post, onLike, onSus, onReal, onConfess, onComment }: PostCardProps) {
+export default function PostCard({ post, onLike, onSus, onReal, onConfess, onComment, onLocationChain, onChallengeChain }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(post.isLiked || false)
   const [likesCount, setLikesCount] = useState(post.likesCount)
   const [isSus, setIsSus] = useState(post.isSus || false)
@@ -35,14 +37,7 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess, onCom
   // Calculate trust ratio
   const totalVotes = susCount + realCount
   const trustPercent = totalVotes > 0 ? Math.round((realCount / totalVotes) * 100) : 100
-  
-  // Trust level for visual treatment (can be used for background tinting later)
-  const _trustLevel = isBusted ? 'busted' 
-    : totalVotes < 1 ? 'neutral'
-    : trustPercent >= 70 ? 'trusted'
-    : trustPercent >= 40 ? 'disputed'
-    : 'suspicious'
-  void _trustLevel // Reserved for future visual treatment
+  const hasVoted = isSus || isReal
 
   const drawingDataUrl = extractDrawingDataUrl(post.userDrawing)
   const hasDrawing = hasValidDrawing(post.userDrawing, post.type)
@@ -207,32 +202,54 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess, onCom
             <MessageCircle className="w-6 h-6" />
             <span className="text-sm font-medium">{post.commentsCount}</span>
           </button>
+
+          {/* Location chain icon - persistent posts only */}
+          {post.type === 'persistent' && onLocationChain && (
+            <button
+              onClick={() => onLocationChain(post.id)}
+              className="flex items-center gap-1 text-eidola-teal"
+            >
+              <MapPin className="w-6 h-6" />
+              <span className="text-sm font-medium">{post.chainEntryCount || 0}</span>
+            </button>
+          )}
+
+          {/* Challenge chain icon - challenge posts only */}
+          {post.isChallenge && onChallengeChain && (
+            <button
+              onClick={() => onChallengeChain(post.id)}
+              className="flex items-center gap-1 text-eidola-magenta"
+            >
+              <Trophy className="w-6 h-6" />
+              <span className="text-sm font-medium">{post.submissionsCount}</span>
+            </button>
+          )}
         </div>
 
-        {/* Trust voting buttons */}
+        {/* Trust voting buttons with +1 token incentive */}
         {!isBusted && onReal && onSus && (
           <div className="flex items-center gap-2">
             <button
               onClick={handleReal}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                isReal 
-                  ? 'bg-green-500 text-white' 
+                isReal
+                  ? 'bg-green-500 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600'
               }`}
             >
               <CheckCircle className="w-4 h-4" />
-              Real
+              Real{!hasVoted && ' +1'}
             </button>
             <button
               onClick={handleSus}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                isSus 
-                  ? 'bg-purple-500 text-white' 
+                isSus
+                  ? 'bg-purple-500 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-purple-50 hover:text-purple-600'
               }`}
             >
               <Bot className="w-4 h-4" />
-              AI?
+              AI?{!hasVoted && ' +1'}
             </button>
           </div>
         )}
@@ -277,18 +294,18 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess, onCom
       {post.isOwner && !isBusted && (susCount > 0 || realCount > 0) && onConfess && (() => {
         const potentialPoints = calculateConfessionPoints(realCount, susCount)
         const isTrusted = realCount > susCount
-        
+
         return (
           <div className={`mx-4 mb-3 p-3 rounded-xl border ${
-            isTrusted 
-              ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200' 
+            isTrusted
+              ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
               : 'bg-gradient-to-r from-purple-50 to-pink-50 border-purple-100'
           }`}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-sm flex-1">
                 {isTrusted ? (
                   <>
-                    <span className="font-medium text-green-700">🎭 They believe it's real!</span>
+                    <span className="font-medium text-green-700">They believe it's real!</span>
                     <span className="text-green-600 font-bold ml-1">+{potentialPoints} pts</span>
                   </>
                 ) : (
@@ -316,7 +333,7 @@ export default function PostCard({ post, onLike, onSus, onReal, onConfess, onCom
       {/* Confetti animation */}
       {showConfetti && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="text-6xl animate-bounce">🎉</div>
+          <div className="text-6xl animate-bounce">+</div>
         </div>
       )}
 

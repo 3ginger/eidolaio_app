@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
-import { usePost, useComments, likePost, deletePost, reportPost, susPost, realPost, confessPost } from '../hooks/usePosts'
+import { usePost, likePost, deletePost, reportPost, susPost, realPost, confessPost } from '../hooks/usePosts'
 import { calculateConfessionPoints } from '../config/points'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useFormSubmit } from '../hooks/useFormSubmit'
@@ -10,6 +10,7 @@ import PhotoChain from '../components/post/PhotoChain'
 import NSFWOverlay from '../components/common/NSFWOverlay'
 import ChallengeSubmit from '../components/challenge/ChallengeSubmit'
 import ChallengeChain from '../components/challenge/ChallengeChain'
+import CommentsSheet from '../components/post/CommentsSheet'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Avatar from '../components/ui/Avatar'
 import Modal from '../components/ui/Modal'
@@ -24,9 +25,7 @@ import {
   Clock,
   Share2,
   MoreHorizontal,
-  Loader2,
   ChevronLeft,
-  Send,
   Bot,
   CheckCircle
 } from 'lucide-react'
@@ -38,15 +37,14 @@ export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>()
   const postId = id ? parseInt(id) : undefined
   const { post, isLoading, error } = usePost(postId)
-  const { comments, isLoading: commentsLoading, addComment } = useComments(postId)
   const [showNsfw, setShowNsfw] = useState(false)
-  const [newComment, setNewComment] = useState('')
   const [isLiked, setIsLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(0)
   const [showChallenge, setShowChallenge] = useState(false)
   const [showDrawing, setShowDrawing] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [commentPostId, setCommentPostId] = useState<number | null>(null)
   const [isSus, setIsSus] = useState(false)
   const [isReal, setIsReal] = useState(false)
   const [susCount, setSusCount] = useState(0)
@@ -73,6 +71,7 @@ export default function PostDetailPage() {
   // Trust calculations
   const totalVotes = susCount + realCount
   const trustPercent = totalVotes > 0 ? Math.round((realCount / totalVotes) * 100) : 100
+  const hasVoted = isSus || isReal
 
   // Close menu when clicking outside
   useClickOutside(menuRef, () => setShowMenu(false), showMenu)
@@ -115,13 +114,6 @@ export default function PostDetailPage() {
     setLikesCount(prev => result.liked ? prev + 1 : prev - 1)
   }
 
-  const handleComment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newComment.trim()) return
-    await addComment(newComment)
-    setNewComment('')
-  }
-
   const handleShare = async () => {
     if (navigator.share) {
       await navigator.share({
@@ -162,7 +154,7 @@ export default function PostDetailPage() {
     }
     const result = await susPost(postId, token)
     if (!wasSus && result.pointsEarned && result.pointsEarned > 0) {
-      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+      showSuccess(`+${result.pointsEarned} point for contributing to the community!`)
     }
   }
 
@@ -179,7 +171,7 @@ export default function PostDetailPage() {
     }
     const result = await realPost(postId, token)
     if (!wasReal && result.pointsEarned && result.pointsEarned > 0) {
-      showSuccess(`🎉 +${result.pointsEarned} point for contributing to the community!`)
+      showSuccess(`+${result.pointsEarned} point for contributing to the community!`)
     }
   }
 
@@ -190,7 +182,7 @@ export default function PostDetailPage() {
     setIsBusted(true)
     const result = await confessPost(postId, token)
     if (result.pointsEarned && result.pointsEarned > 0) {
-      showSuccess(`🎉 +${result.pointsEarned} points for being honest! Respect.`)
+      showSuccess(`+${result.pointsEarned} points for being honest! Respect.`)
     }
     setTimeout(() => setShowConfetti(false), 2000)
   }
@@ -209,43 +201,64 @@ export default function PostDetailPage() {
 
   return (
     <div className="max-w-lg mx-auto bg-white min-h-screen">
-      {/* Header */}
-      <div className="sticky top-14 z-10 flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-md border-b">
-        <Link to="/feed" className="p-1">
-          <ChevronLeft className="w-6 h-6" />
-        </Link>
-        <div className="flex items-center gap-2">
-          <Avatar user={{ avatarUrl: post.user?.avatarUrl, username: post.user?.username }} size="sm" />
-          <span className="font-medium">@{post.user?.username}</span>
-        </div>
-        <div className="relative" ref={menuRef}>
-          <button className="p-1" onClick={() => setShowMenu(!showMenu)}>
-            <MoreHorizontal className="w-6 h-6" />
+      {/* Author row - same style as feed PostCard */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-3">
+          {/* Back button inline */}
+          <button onClick={() => navigate(-1)} className="p-1 -ml-1">
+            <ChevronLeft className="w-6 h-6" />
           </button>
-          {showMenu && (
-            <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border py-1 z-20">
-              <button
-                onClick={handleCopyLink}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-              >
-                Copy link
-              </button>
-              <button
-                onClick={handleReport}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-              >
-                Report
-              </button>
-              {isOwnPost && (
-                <button
-                  onClick={handleDelete}
-                  className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-gray-100"
-                >
-                  Delete
-                </button>
+          <Link to={`/profile/${post.user?.username}`} className="flex items-center gap-3">
+            <Avatar user={{ avatarUrl: post.user?.avatarUrl, username: post.user?.username }} />
+            <div>
+              <span className="font-semibold text-sm">{post.user?.username}</span>
+              {post.address && (
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <MapPin className="w-3 h-3" />
+                  {post.address}
+                </div>
               )}
             </div>
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {post.type === 'temporary' && timeRemaining && (
+            <span className="flex items-center gap-1 text-xs text-eidola-orange bg-orange-50 px-2 py-1 rounded-full">
+              <Clock className="w-3 h-3" />
+              {timeRemaining}
+            </span>
           )}
+          {/* ⋯ menu in the author row */}
+          <div className="relative" ref={menuRef}>
+            <button className="p-1" onClick={() => setShowMenu(!showMenu)}>
+              <MoreHorizontal className="w-5 h-5 text-gray-500" />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border py-1 z-20">
+                <button
+                  onClick={handleCopyLink}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                >
+                  Copy link
+                </button>
+                <button
+                  onClick={handleReport}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                >
+                  Report
+                </button>
+                {isOwnPost && (
+                  <button
+                    onClick={handleDelete}
+                    className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-gray-100"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -275,7 +288,7 @@ export default function PostDetailPage() {
                 />
               )}
 
-              {/* Drawing toggle button - small icon in corner */}
+              {/* Drawing toggle button */}
               {hasDrawing && (
                 <DrawingToggleButton
                   showDrawing={showDrawing}
@@ -287,14 +300,8 @@ export default function PostDetailPage() {
           )
         })()}
 
-        {/* Badges */}
+        {/* Badges over image */}
         <div className="absolute top-4 left-4 flex flex-col gap-2">
-          {post.type === 'temporary' && timeRemaining && (
-            <div className="bg-white/90 px-3 py-1 rounded-full text-sm flex items-center gap-1">
-              <Clock className="w-4 h-4 text-eidola-orange" />
-              {timeRemaining}
-            </div>
-          )}
           {post.location && (
             <div className="bg-white/90 px-3 py-1 rounded-full text-sm flex items-center gap-1">
               <MapPin className="w-4 h-4 text-eidola-teal" />
@@ -313,14 +320,14 @@ export default function PostDetailPage() {
               <p className="text-xs text-gray-500">Help the community identify authentic content</p>
             </div>
             {totalVotes > 0 && (
-              <span className="text-sm font-medium" style={{ 
-                color: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626' 
+              <span className="text-sm font-medium" style={{
+                color: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
               }}>
                 {trustPercent}% trust
               </span>
             )}
           </div>
-          
+
           {/* Trust meter */}
           {totalVotes > 0 && (
             <div className="mb-3">
@@ -330,9 +337,9 @@ export default function PostDetailPage() {
                 <span className="text-purple-600">{susCount} suspect AI</span>
               </div>
               <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full transition-all duration-300 rounded-full"
-                  style={{ 
+                  style={{
                     width: `${trustPercent}%`,
                     backgroundColor: trustPercent >= 70 ? '#16a34a' : trustPercent >= 40 ? '#d97706' : '#dc2626'
                   }}
@@ -341,29 +348,29 @@ export default function PostDetailPage() {
             </div>
           )}
 
-          {/* Voting buttons */}
+          {/* Voting buttons with +1 token incentive */}
           <div className="flex gap-2">
             <button
               onClick={handleReal}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-all ${
-                isReal 
-                  ? 'bg-green-500 text-white' 
+                isReal
+                  ? 'bg-green-500 text-white'
                   : 'bg-white border border-gray-200 text-gray-700 hover:border-green-300 hover:text-green-600'
               }`}
             >
               <CheckCircle className="w-5 h-5" />
-              Real
+              Real{!hasVoted && ' +1'}
             </button>
             <button
               onClick={handleSus}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-all ${
-                isSus 
-                  ? 'bg-purple-500 text-white' 
+                isSus
+                  ? 'bg-purple-500 text-white'
                   : 'bg-white border border-gray-200 text-gray-700 hover:border-purple-300 hover:text-purple-600'
               }`}
             >
               <Bot className="w-5 h-5" />
-              AI?
+              AI?{!hasVoted && ' +1'}
             </button>
           </div>
         </div>
@@ -377,22 +384,22 @@ export default function PostDetailPage() {
               <Bot className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-purple-700">Busted! 🤖</h3>
+              <h3 className="font-semibold text-purple-700">Busted!</h3>
               <p className="text-sm text-gray-600">{susCount} {susCount === 1 ? 'person' : 'people'} called it — the author confirmed this is AI-generated</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Confess banner for owner - different message based on trust level */}
+      {/* Confess banner for owner */}
       {isOwnPost && !isBusted && (susCount > 0 || realCount > 0) && (() => {
         const potentialPoints = calculateConfessionPoints(realCount, susCount)
         const isTrusted = realCount > susCount
-        
+
         return (
           <div className={`mx-4 my-3 p-4 rounded-xl border ${
-            isTrusted 
-              ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200' 
+            isTrusted
+              ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
               : 'bg-gradient-to-r from-purple-50 to-pink-50 border-purple-100'
           }`}>
             <div className="flex items-center justify-between gap-3">
@@ -400,7 +407,7 @@ export default function PostDetailPage() {
                 {isTrusted ? (
                   <>
                     <p className="font-medium text-green-700">
-                      🎭 People believe this is real ({realCount} vs {susCount})
+                      People believe this is real ({realCount} vs {susCount})
                     </p>
                     <p className="text-sm text-gray-600">
                       But if you used AI, confess now for{' '}
@@ -426,7 +433,7 @@ export default function PostDetailPage() {
                     : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
                 }`}
               >
-                {isTrusted ? `+${potentialPoints} pts 🤫` : `+${potentialPoints} pts 🤖`}
+                +{potentialPoints} pts
               </button>
             </div>
           </div>
@@ -436,7 +443,7 @@ export default function PostDetailPage() {
       {/* Confetti animation */}
       {showConfetti && (
         <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-50">
-          <div className="text-8xl animate-bounce">🎉</div>
+          <div className="text-8xl animate-bounce">+</div>
         </div>
       )}
 
@@ -450,7 +457,10 @@ export default function PostDetailPage() {
             <Heart className={`w-6 h-6 ${isLiked ? 'fill-current' : ''}`} />
             <span className="text-sm font-medium">{likesCount}</span>
           </button>
-          <button className="flex items-center gap-1">
+          <button
+            onClick={() => setCommentPostId(postId ?? null)}
+            className="flex items-center gap-1"
+          >
             <MessageCircle className="w-6 h-6" />
             <span className="text-sm font-medium">{post.commentsCount}</span>
           </button>
@@ -464,7 +474,9 @@ export default function PostDetailPage() {
       {post.userCaption && (
         <div className="px-4 py-3 border-b">
           <p className="text-lg">
-            <span className="font-medium">@{post.user?.username}</span>{' '}
+            <Link to={`/profile/${post.user?.username}`} className="font-medium">
+              {post.user?.username}
+            </Link>{' '}
             {post.userCaption}
           </p>
           {post.title && (
@@ -503,53 +515,11 @@ export default function PostDetailPage() {
         <PhotoChain postId={postId} />
       )}
 
-      {/* Comments */}
-      <div className="px-4 py-4 pb-24">
-        <h3 className="font-semibold mb-4">Comments</h3>
-
-        {commentsLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-        ) : comments.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No comments yet</p>
-        ) : (
-          <div className="space-y-4">
-            {comments.map(comment => (
-              <div key={comment.id} className="flex gap-3">
-                <Avatar
-                  user={{ avatarUrl: comment.user?.avatarUrl, username: comment.user?.username }}
-                  size="sm"
-                  className="flex-shrink-0"
-                />
-                <div>
-                  <span className="font-medium text-sm">@{comment.user?.username}</span>
-                  <p className="text-sm">{comment.content}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Comment input - positioned above mobile nav */}
-      <form
-        onSubmit={handleComment}
-        className="sticky bottom-16 md:bottom-0 flex items-center gap-2 px-4 py-3 bg-white border-t"
-      >
-        <input
-          type="text"
-          value={newComment}
-          onChange={e => setNewComment(e.target.value)}
-          placeholder="Add a comment..."
-          className="flex-1 px-4 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-eidola-orange/50"
-        />
-        <button
-          type="submit"
-          disabled={!newComment.trim()}
-          className="p-2 text-eidola-orange disabled:opacity-50"
-        >
-          <Send className="w-5 h-5" />
-        </button>
-      </form>
+      {/* Comments sheet (popup) */}
+      <CommentsSheet
+        postId={commentPostId}
+        onClose={() => setCommentPostId(null)}
+      />
 
       {/* Challenge modal */}
       {showChallenge && postId && (
