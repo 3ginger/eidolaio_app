@@ -407,11 +407,11 @@ export default function CreatePostPage() {
         }
 
         return (
-          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-4" style={{ height: '100dvh' }}>
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-4" style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
             {/* Close button to exit create flow */}
             <button
               onClick={handleExit}
-              className="absolute top-4 left-4 p-2 hover:bg-gray-100 rounded-full"
+              className="absolute left-4 p-2 hover:bg-gray-100 rounded-full" style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
             >
               <X className="w-6 h-6" />
             </button>
@@ -511,7 +511,7 @@ export default function CreatePostPage() {
       case 'draw':
         return (
           <div className="fixed inset-0 z-50 flex flex-col bg-gray-900" style={{ height: '100dvh' }}>
-            <div className="flex-shrink-0 flex items-center justify-between px-4 pt-4 pb-3 bg-white border-b">
+            <div className="flex-shrink-0 flex items-center justify-between px-4 pb-3 bg-white border-b" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
               <div className="flex items-center gap-2">
                 <button onClick={handleExit} className="p-1">
                   <X className="w-6 h-6" />
@@ -546,7 +546,7 @@ export default function CreatePostPage() {
         // Simplified UI for chain join mode
         if (joinChainId && parentPost) {
           return (
-            <div className="fixed inset-0 z-50 px-4 pt-4 pb-8 overflow-y-auto bg-white" style={{ height: '100dvh' }}>
+            <div className="fixed inset-0 z-50 px-4 pb-8 overflow-y-auto bg-white" style={{ height: '100dvh', paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                   <button onClick={handleExit} className="p-1">
@@ -601,7 +601,7 @@ export default function CreatePostPage() {
 
         // Regular post creation UI
         return (
-          <div className="fixed inset-0 z-50 px-4 pt-4 pb-8 overflow-y-auto bg-white" style={{ height: '100dvh' }}>
+          <div className="fixed inset-0 z-50 px-4 pb-8 overflow-y-auto bg-white" style={{ height: '100dvh', paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <button onClick={handleExit} className="p-1">

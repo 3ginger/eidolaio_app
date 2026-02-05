@@ -253,7 +253,7 @@ export default function ImagePositioner({ imageUrl, onDone, onCancel, onExit }: 
   return (
     <div className="h-[100dvh] flex flex-col bg-gray-900 overflow-hidden">
       {/* Header - fixed height */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 pt-4 pb-3 bg-white border-b">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 pb-3 bg-white border-b" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
         <div className="flex items-center gap-2">
           {onExit && (
             <button onClick={onExit} className="p-1">

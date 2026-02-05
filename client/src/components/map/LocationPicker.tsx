@@ -188,7 +188,7 @@ export default function LocationPicker({ onSelect, onCancel, initialLocation, in
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="bg-white px-4 py-3 border-b flex items-center gap-3">
+      <div className="bg-white px-4 pb-3 border-b flex items-center gap-3" style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))' }}>
         <button onClick={onCancel}>
           <X className="w-6 h-6" />
         </button>
