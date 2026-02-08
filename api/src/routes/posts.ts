@@ -495,7 +495,7 @@ router.post('/:id/confess', requireAuth, async (req: Request, res: Response) => 
 })
 
 // Get comments for a post
-router.get('/:id/comments', async (req: Request, res: Response) => {
+router.get('/:id/comments', optionalAuth, async (req: Request, res: Response) => {
   try {
     const postId = parseInt(req.params.id as string)
 
@@ -504,24 +504,30 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
       id: number
       content: string
       created_at: string
+      likes_count: number
+      is_liked: boolean
       username: string
       display_name: string | null
       avatar_url: string | null
     }>(
       `SELECT c.id, c.content, c.created_at,
+              COALESCE(c.likes_count, 0) as likes_count,
+              ${req.userId ? 'EXISTS(SELECT 1 FROM eidola.comment_likes WHERE comment_id = c.id AND user_id = $2) as is_liked' : 'false as is_liked'},
               u.username, u.display_name, u.avatar_url
        FROM eidola.comments c
        JOIN eidola.users u ON c.user_id = u.id
        WHERE c.post_id = $1
          AND COALESCE(u.is_test_user, false) = false
        ORDER BY c.created_at ASC`,
-      [postId]
+      req.userId ? [postId, req.userId] : [postId]
     )
 
     res.json(comments.map(c => ({
       id: c.id,
       content: c.content,
       createdAt: c.created_at,
+      likesCount: c.likes_count,
+      isLiked: c.is_liked,
       user: {
         username: c.username,
         displayName: c.display_name,
@@ -568,6 +574,57 @@ router.post('/:id/comments', requireAuth, async (req: Request, res: Response) =>
   } catch (error) {
     console.error('Error adding comment:', error)
     res.status(500).json({ error: 'Failed to add comment' })
+  }
+})
+
+// Like/unlike a comment
+router.post('/:id/comments/:commentId/like', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const postId = parseInt(req.params.id as string)
+    const commentId = parseInt(req.params.commentId as string)
+
+    // Verify comment exists and belongs to the post
+    const comment = await getOne<{ id: number; user_id: number }>(
+      'SELECT id, user_id FROM eidola.comments WHERE id = $1 AND post_id = $2',
+      [commentId, postId]
+    )
+
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' })
+    }
+
+    // Check if already liked
+    const existing = await getOne<{ id: number }>(
+      'SELECT id FROM eidola.comment_likes WHERE comment_id = $1 AND user_id = $2',
+      [commentId, req.userId]
+    )
+
+    if (existing) {
+      // Unlike
+      await query('DELETE FROM eidola.comment_likes WHERE comment_id = $1 AND user_id = $2', [commentId, req.userId])
+      await query('UPDATE eidola.comments SET likes_count = likes_count - 1 WHERE id = $1', [commentId])
+      res.json({ liked: false })
+    } else {
+      // Like
+      await query('INSERT INTO eidola.comment_likes (comment_id, user_id) VALUES ($1, $2)', [commentId, req.userId])
+      await query('UPDATE eidola.comments SET likes_count = likes_count + 1 WHERE id = $1', [commentId])
+
+      // Notify comment author
+      if (comment.user_id !== req.userId) {
+        createNotification({
+          userId: comment.user_id,
+          type: 'comment_like',
+          actorId: req.userId,
+          postId,
+          message: 'liked your comment',
+        })
+      }
+
+      res.json({ liked: true })
+    }
+  } catch (error) {
+    console.error('Error toggling comment like:', error)
+    res.status(500).json({ error: 'Failed to toggle comment like' })
   }
 })
 

@@ -60,7 +60,8 @@ export function useComments(postId: number | undefined) {
     const fetchComments = async () => {
       try {
         setIsLoading(true)
-        const data = await get<Comment[]>(`/posts/${postId}/comments`)
+        const token = await getToken()
+        const data = await get<Comment[]>(`/posts/${postId}/comments`, undefined, token)
         setComments(data)
       } catch (err) {
         console.error('Failed to fetch comments:', err)
@@ -70,18 +71,50 @@ export function useComments(postId: number | undefined) {
     }
 
     fetchComments()
-  }, [postId])
+  }, [postId, getToken])
 
   const addComment = async (content: string) => {
     if (!postId) return
     const token = await getToken()
     await post(`/posts/${postId}/comments`, { content }, token)
     // Refetch comments
-    const data = await get<Comment[]>(`/posts/${postId}/comments`)
+    const data = await get<Comment[]>(`/posts/${postId}/comments`, undefined, token)
     setComments(data)
   }
 
-  return { comments, isLoading, addComment }
+  const toggleCommentLike = async (commentId: number) => {
+    if (!postId) return
+    const token = await getToken()
+
+    // Optimistic update
+    setComments(prev => prev.map(c => {
+      if (c.id !== commentId) return c
+      const wasLiked = c.isLiked
+      return {
+        ...c,
+        isLiked: !wasLiked,
+        likesCount: wasLiked ? c.likesCount - 1 : c.likesCount + 1,
+      }
+    }))
+
+    try {
+      await likeComment(postId, commentId, token)
+    } catch (err) {
+      // Revert on error
+      setComments(prev => prev.map(c => {
+        if (c.id !== commentId) return c
+        const wasLiked = c.isLiked
+        return {
+          ...c,
+          isLiked: !wasLiked,
+          likesCount: wasLiked ? c.likesCount - 1 : c.likesCount + 1,
+        }
+      }))
+      console.error('Failed to toggle comment like:', err)
+    }
+  }
+
+  return { comments, isLoading, addComment, toggleCommentLike }
 }
 
 export function useTags() {
@@ -109,6 +142,10 @@ export function useTags() {
 // Post actions
 export async function likePost(postId: number, token?: string | null): Promise<{ liked: boolean }> {
   return post(`/posts/${postId}/like`, undefined, token)
+}
+
+export async function likeComment(postId: number, commentId: number, token?: string | null): Promise<{ liked: boolean }> {
+  return post(`/posts/${postId}/comments/${commentId}/like`, undefined, token)
 }
 
 export async function deletePost(postId: number, token?: string | null): Promise<void> {

@@ -137,7 +137,7 @@ export async function createNotification({
   message,
 }: {
   userId: number
-  type: 'like' | 'comment' | 'follow' | 'chain_join' | 'sus'
+  type: 'like' | 'comment' | 'follow' | 'chain_join' | 'sus' | 'comment_like'
   actorId?: number
   postId?: number
   message?: string

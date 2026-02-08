@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useComments } from '../../hooks/usePosts'
 import { formatRelativeDate } from '../../utils/dateTime'
 import Avatar from '../ui/Avatar'
-import { X, Send, Loader2 } from 'lucide-react'
+import { X, Send, Loader2, Heart } from 'lucide-react'
 
 interface CommentsSheetProps {
   postId: number | null
@@ -11,7 +11,7 @@ interface CommentsSheetProps {
 }
 
 export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
-  const { comments, isLoading, addComment } = useComments(postId ?? undefined)
+  const { comments, isLoading, addComment, toggleCommentLike } = useComments(postId ?? undefined)
   const [newComment, setNewComment] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
@@ -156,6 +156,17 @@ export default function CommentsSheet({ postId, onClose }: CommentsSheetProps) {
                     </div>
                     <p className="text-sm text-gray-800 mt-0.5">{comment.content}</p>
                   </div>
+                  <button
+                    onClick={() => toggleCommentLike(comment.id)}
+                    className="flex flex-col items-center gap-0.5 pt-1 flex-shrink-0"
+                  >
+                    <Heart
+                      className={`w-3.5 h-3.5 ${comment.isLiked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
+                    />
+                    {comment.likesCount > 0 && (
+                      <span className="text-[10px] text-gray-400">{comment.likesCount}</span>
+                    )}
+                  </button>
                 </div>
               ))}
             </div>

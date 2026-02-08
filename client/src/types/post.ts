@@ -76,6 +76,8 @@ export interface Comment {
   postId: number
   userId: number
   content: string
+  likesCount: number
+  isLiked?: boolean
   createdAt: string
   user?: {
     username: string
