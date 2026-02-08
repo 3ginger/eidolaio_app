@@ -16,8 +16,7 @@ import './index.css'
 initNativePlatform()
 
 // Initialize Sentry before anything else
-const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN ||
-  'https://2b1c581e43a24a8abdaf715c2e3a55b3@o4505517239697408.ingest.us.sentry.io/4505517242187776'
+const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN
 
 if (SENTRY_DSN) {
   Sentry.init({
